@@ -11,6 +11,7 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -32,6 +33,10 @@ import org.apache.commons.lang.StringUtils;
  * @version 1.0
  */
 public class ImportCSV {
+    private static final String NUMBER_PATTER = "\\d+(\\.\\d+)?";
+
+    private static final String INT_PATTERN = "\\d+";
+
     static String dateFormatPattern = "yyyy/MM/dd";
 
     static SimpleDateFormat dateFormat = new SimpleDateFormat(dateFormatPattern);
@@ -63,22 +68,8 @@ public class ImportCSV {
 
         Class.forName(driverName).newInstance();
         Connection connection = DriverManager.getConnection(linkUrl, userName, password);
-        DatabaseMetaData metaData = connection.getMetaData();
 
-        Map<String, String> columnTypeMap = new HashMap<String, String>();
-
-        String columnName;
-        String columnType;
-        ResultSet columnResultSet = metaData.getColumns(null, userName, tableName, "%");
-        while (columnResultSet.next()) {
-            columnName = columnResultSet.getString("COLUMN_NAME");
-            columnType = columnResultSet.getString("TYPE_NAME");
-            // int datasize = columnResultSet.getInt("COLUMN_SIZE");
-            // int digits = columnResultSet.getInt("DECIMAL_DIGITS");
-            // int nullable = columnResultSet.getInt("NULLABLE");
-            columnTypeMap.put(columnName, columnType);
-        }
-        System.out.println("column count of table " + tableName + ":" + columnTypeMap.size());
+        Map<String, Column> columnTypeMap = getColumnTypeMap(connection, userName, tableName);
 
         File file = new File(cvsFilePath);
         Reader reader = new InputStreamReader(new FileInputStream(file), fileEncode);
@@ -93,29 +84,36 @@ public class ImportCSV {
         }
         insertSqlPrefix += ") values(";
 
-        connection.setAutoCommit(false);
-        Statement statement = connection.createStatement();
-
         List<CSVRecord> records = parser.getRecords();
-        for (CSVRecord csvRecord : records) {
+        List<String> sqls = new ArrayList<String>();
+        for (int recordIndex = 0; recordIndex < records.size(); recordIndex++) {
+            CSVRecord csvRecord = records.get(recordIndex);
             String cname = columns.get(0);
             String cvalue = csvRecord.get(0);
-            String ctype = columnTypeMap.get(cname);
+            Column column = columnTypeMap.get(cname);
 
             StringBuffer sqlBuffer = new StringBuffer();
             sqlBuffer.append(insertSqlPrefix);
-            addColumnValue(sqlBuffer, cname, cvalue, ctype); // add first
+            addColumnValue(sqlBuffer, recordIndex, cname, cvalue, column); // add first
 
-            for (int i = 1; i < columns.size(); i++) {
-                cname = columns.get(i);
-                cvalue = csvRecord.get(i);
-                ctype = columnTypeMap.get(cname);
+            for (int j = 1; j < columns.size(); j++) {
+                cname = columns.get(j);
+                cvalue = csvRecord.get(j);
+                column = columnTypeMap.get(cname);
                 sqlBuffer.append(",");
-                addColumnValue(sqlBuffer, cname, cvalue, ctype);
+                addColumnValue(sqlBuffer, recordIndex, cname, cvalue, column);
             }
             sqlBuffer.append(")");
             String sql = sqlBuffer.toString();
-            System.out.println(sql);
+
+            sqls.add(sql);
+        }
+        connection.setAutoCommit(false);
+        Statement statement = connection.createStatement();
+
+        for (int i = 0; i < sqls.size(); i++) {
+            String sql = sqls.get(i);
+            System.out.println(i + "\t : \t" + sql);
             statement.execute(sql);
         }
 
@@ -134,28 +132,81 @@ public class ImportCSV {
         System.out.println("over");
     }
 
-    private static void addColumnValue(StringBuffer buffer, String cname, String cvalue, String ctype) {
-        if (ctype == null || cname == null) {
-            throw new RuntimeException("can't find column:" + cname);
+    private static Map<String, Column> getColumnTypeMap(Connection connection, String userName, String tableName) throws SQLException {
+        Map<String, Column> columnTypeMap = new HashMap<String, Column>();
+        DatabaseMetaData metaData = connection.getMetaData();
+        ResultSet columnResultSet = metaData.getColumns(null, userName.toUpperCase(), tableName.toUpperCase(), "%");
+
+        while (columnResultSet.next()) {
+            String name = columnResultSet.getString("COLUMN_NAME");
+            String type = columnResultSet.getString("TYPE_NAME");
+            int size = columnResultSet.getInt("COLUMN_SIZE");
+            int digits = columnResultSet.getInt("DECIMAL_DIGITS");
+            int nullable = columnResultSet.getInt("NULLABLE");
+
+            Column column = new Column();
+            column.setName(name);
+            column.setType(type);
+            column.setSize(size);
+            column.setDecimalDigits(digits);
+            column.setNullable(nullable > 0);
+
+            if (name.equals("ACHV_STATUS")) {
+                System.out.println("");
+            }
+            columnTypeMap.put(name, column);
+        }
+        System.out.println("column count of table " + tableName + ":" + columnTypeMap.size());
+
+        return columnTypeMap;
+    }
+
+    private static void addColumnValue(StringBuffer buffer, int columnIndex, String cname, String cvalue, Column column) throws SQLException {
+        if (column == null || cname == null) {
+            throw new RuntimeException("Error column[" + columnIndex + "] can't find column:" + cname);
         }
 
-        if (cvalue == null || cvalue.equals("")) {
+        if (cvalue == null || "".equals(cvalue)) {
+            if (!column.isNullable()) {
+                throw new SQLException("Error column[" + columnIndex + "] the value of column[" + cname + "] should not be null!");
+            }
             buffer.append("null");
             return;
         }
 
-        if ("NUMBER".equals(ctype) || "INT".equals(ctype)) {
+        if (cvalue.contains("'")) {
+            throw new SQLException("Error column[" + columnIndex + "] contains single quotation marks in column[" + cname + "]:" + cvalue);
+        }
+
+        String type = column.getType();
+
+        if ("NUMBER".equals(column) || "INT".equals(column)) {
+            if (cvalue.length() > column.size) {
+                throw new SQLException("Error column[" + columnIndex + "] the size of column[" + cname + "][" + cvalue + "] is " + cvalue.length() + ", while the max size is " + column.size);
+            }
+            if ("NUMBER".equals(column) && !cvalue.matches(NUMBER_PATTER)) {
+                throw new SQLException("Error column[" + columnIndex + "][" + cvalue + "] is not a number!");
+            }
+            if ("IN".equals(column) && !cvalue.matches(INT_PATTERN)) {
+                throw new SQLException("Error column[" + columnIndex + "][" + cvalue + "] is not a integer!");
+            }
+
             buffer.append(cvalue);
-        } else if (ctype.indexOf("CHAR") != -1) {
+        }
+        /* CHAR,VARCHAR,NVARCHAR */
+        else if (type.indexOf("CHAR") != -1) {
+            if (cvalue.length() > column.size) {
+                throw new SQLException("Error column[" + columnIndex + "] the length of column[" + cname + "][" + cvalue + "] is " + cvalue.length() + ", while the max length is " + column.size);
+            }
             buffer.append("\'" + cvalue + "\'");
-        } else if (ctype.indexOf("TIMESTAMP") != -1) {
+        } else if (type.indexOf("TIMESTAMP") != -1) {
             try {
                 datetimeFormat.parse(cvalue);
             } catch (ParseException e) {
                 throw new RuntimeException("bad date time format value[" + cvalue + "] for column " + cname);
             }
             buffer.append("to_date(\'" + cvalue + "\',\'yyyy/mm/dd hh24:mi:ss\')");
-        } else if (ctype.indexOf("DATE") != -1) {
+        } else if (type.indexOf("DATE") != -1) {
             try {
                 dateFormat.parse(cvalue);
             } catch (ParseException e) {
