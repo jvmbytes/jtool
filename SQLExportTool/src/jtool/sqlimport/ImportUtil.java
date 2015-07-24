@@ -7,9 +7,11 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -58,21 +60,21 @@ public class ImportUtil {
         return columnTypeMap;
     }
 
-    public static void addColumnValue(StringBuffer buffer, int columnIndex, String cname, String cvalue, Column column) throws SQLException {
+    public static void addColumnValue(StringBuffer buffer, int rowIndex, String cname, String cvalue, Column column) throws SQLException {
         if (column == null || cname == null) {
-            throw new RuntimeException("Error column[" + columnIndex + "] can't find column:" + cname);
+            throw new RuntimeException("Error Row[" + rowIndex + "] can't find column:" + cname);
         }
 
         if (cvalue == null || "".equals(cvalue)) {
             if (!column.isNullable()) {
-                throw new SQLException("Error column[" + columnIndex + "] the value of column[" + cname + "] should not be null!");
+                throw new SQLException("Error Row[" + rowIndex + "] the value of column[" + cname + "] should not be null!");
             }
             buffer.append("null");
             return;
         }
 
         if (cvalue.contains("'")) {
-            System.err.println("Error column[" + columnIndex + "] contains single quotation marks in column[" + cname + "]:" + cvalue);
+            System.err.println("Error Row[" + rowIndex + "] contains single quotation marks in column[" + cname + "]:" + cvalue);
             cvalue = cvalue.replaceAll("'", "\"");
             System.err.println("Replaced with double quotation:" + cvalue);
         }
@@ -81,14 +83,13 @@ public class ImportUtil {
 
         if ("NUMBER".equals(column) || "INT".equals(column)) {
             if (cvalue.length() > column.size) {
-                throw new SQLException("Error column[" + columnIndex + "] the size of the value[" + cvalue + "] of column[" + cname + "] is " + cvalue.length() + ", while the max size is "
-                        + column.size);
+                throw new SQLException("Error Row[" + rowIndex + "] the size of the value[" + cvalue + "] of column[" + cname + "] is " + cvalue.length() + ", while the max size is " + column.size);
             }
             if ("NUMBER".equals(column) && !cvalue.matches(NUMBER_PATTER)) {
-                throw new SQLException("Error column[" + columnIndex + "] the value[" + cvalue + "] is not a number!");
+                throw new SQLException("Error Row[" + rowIndex + "] the value[" + cvalue + "] is not a number!");
             }
             if ("IN".equals(column) && !cvalue.matches(INT_PATTERN)) {
-                throw new SQLException("Error column[" + columnIndex + "] the value[" + cvalue + "] is not a integer!");
+                throw new SQLException("Error Row[" + rowIndex + "] the value[" + cvalue + "] is not a integer!");
             }
 
             buffer.append(cvalue);
@@ -96,7 +97,7 @@ public class ImportUtil {
         /* CHAR,VARCHAR,NVARCHAR */
         else if (type.indexOf("CHAR") != -1) {
             if (cvalue.length() > column.size) {
-                throw new SQLException("Error column[" + columnIndex + "] the length of the value[" + cvalue + "] of column[" + cname + "] is " + cvalue.length() + ", while the max length is "
+                throw new SQLException("Error Row[" + rowIndex + "] the length of the value[" + cvalue + "] of column[" + cname + "] is " + cvalue.length() + ", while the max length is "
                         + column.size);
             }
             buffer.append("\'" + cvalue + "\'");
@@ -104,18 +105,58 @@ public class ImportUtil {
             try {
                 datetimeFormat.parse(cvalue);
             } catch (ParseException e) {
-                throw new RuntimeException("Error column[" + columnIndex + "] bad date time format value[" + cvalue + "] for column " + cname);
+                throw new RuntimeException("Error Row[" + rowIndex + "] bad date time format value[" + cvalue + "] for column " + cname);
             }
             buffer.append("to_date(\'" + cvalue + "\',\'yyyy/mm/dd hh24:mi:ss\')");
         } else if (type.indexOf("DATE") != -1) {
             try {
                 dateFormat.parse(cvalue);
             } catch (ParseException e) {
-                throw new RuntimeException("Error column[" + columnIndex + "] bad date format value[" + cvalue + "] for column " + cname);
+                throw new RuntimeException("Error Row[" + rowIndex + "] bad date format value[" + cvalue + "] for column " + cname);
             }
             buffer.append("to_date(\'" + cvalue + "\',\'yyyy/mm/dd\')");
         } else {
             buffer.append("\'" + cvalue + "\'");
         }
+    }
+
+    public static void executeSqls(Connection connection, List<String> sqls) throws SQLException {
+        connection.setAutoCommit(false);
+        Statement statement = connection.createStatement();
+
+        System.out.println("start execute sql, total count " + sqls.size());
+        for (int i = 0; i < sqls.size(); i++) {
+            String sql = sqls.get(i);
+            try {
+                statement.execute(sql);
+            } catch (Exception e) {
+                System.err.println("error to execute sql[" + i + "]: \t" + sql);
+                throw e;
+            }
+        }
+
+        System.out.println("================================");
+        System.out.println("begin commit ...");
+
+        connection.commit();
+
+        System.out.println("finish commit ...");
+
+        statement.close();
+    }
+
+    @SuppressWarnings("rawtypes")
+    public static String buildInsertSqlPrefix(String tableName, List columns, Map<String, Column> columnTypeMap) throws Exception {
+        String insertSqlPrefix = "insert into " + tableName + "(" + columns.get(0);
+        for (int i = 1; i < columns.size(); i++) {
+            String cname = (String) columns.get(i);
+            Column column = columnTypeMap.get(cname);
+            if (cname == null || column == null) {
+                throw new Exception("No column named " + cname + " in table " + tableName);
+            }
+            insertSqlPrefix += "," + cname;
+        }
+        insertSqlPrefix += ") values(";
+        return insertSqlPrefix;
     }
 }

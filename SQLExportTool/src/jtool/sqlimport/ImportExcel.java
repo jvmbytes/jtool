@@ -6,7 +6,6 @@ package jtool.sqlimport;
 import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -51,33 +50,34 @@ public class ImportExcel {
         System.out.println("over");
     }
 
-    public static void imp(String driverName, String linkUrl, String userName, String password, String excelFilePath, String tableName) throws Exception {
+    public static void imp(String driverName, String linkUrl, String userName, String password, String tableName, String excelFilePath) throws Exception {
         Class.forName(driverName).newInstance();
         Connection connection = DriverManager.getConnection(linkUrl, userName, password);
 
         File file = new File(excelFilePath);
         int numberOfSheets = ExcelUtil.getNumberOfSheets(file);
-        for (int i = 0; i < numberOfSheets; i++) {
-            imp(connection, userName, tableName, file, 0);
+        for (int sheetIndex = 0; sheetIndex < numberOfSheets; sheetIndex++) {
+            imp(connection, userName, tableName, file, sheetIndex);
         }
 
         connection.close();
     }
 
+    @SuppressWarnings({"rawtypes"})
     public static void imp(Connection connection, String userName, String tableName, File file, int sheetIndex) throws Exception {
         Map<String, Column> columnTypeMap = ImportUtil.getColumnTypeMap(connection, userName, tableName);
 
         System.out.println("start import sheet:" + sheetIndex);
         List<List<Object>> lines = ExcelUtil.readExcelLines(file, sheetIndex, 0);
-        List<Object> columns = lines.get(0);
-
-        List<List<Object>> dataList = lines.subList(1, lines.size() + 1);
-
-        String insertSqlPrefix = "insert into " + tableName + "(" + columns.get(0);
-        for (int i = 1; i < columns.size(); i++) {
-            insertSqlPrefix += "," + columns.get(i);
+        if (lines == null || lines.size() < 2) {
+            System.out.println("no content in sheet:" + sheetIndex);
+            return;
         }
-        insertSqlPrefix += ") values(";
+        List columns = lines.get(0);
+
+        List<List<Object>> dataList = lines.subList(1, lines.size());
+
+        String insertSqlPrefix = ImportUtil.buildInsertSqlPrefix(tableName, columns, columnTypeMap);
 
         List<String> sqls = new ArrayList<String>();
         for (int recordIndex = 0; recordIndex < dataList.size(); recordIndex++) {
@@ -103,23 +103,9 @@ public class ImportExcel {
 
             sqls.add(sql);
         }
-        connection.setAutoCommit(false);
-        Statement statement = connection.createStatement();
 
-        for (int i = 0; i < sqls.size(); i++) {
-            String sql = sqls.get(i);
-            System.out.println(i + "\t : \t" + sql);
-            statement.execute(sql);
-        }
+        ImportUtil.executeSqls(connection, sqls);
 
-        System.out.println("================================");
-        System.out.println("begin commit ...");
-
-        connection.commit();
-
-        System.out.println("finish commit ...");
-
-        statement.close();
     }
 
 }

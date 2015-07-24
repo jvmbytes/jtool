@@ -9,7 +9,6 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -55,6 +54,7 @@ public class ImportCSV {
         System.out.println("over");
     }
 
+    @SuppressWarnings("resource")
     public static void imp(String driverName, String linkUrl, String userName, String password, String tableName, String cvsFilePath, String fileEncode) throws Exception {
         Class.forName(driverName).newInstance();
         Connection connection = DriverManager.getConnection(linkUrl, userName, password);
@@ -68,11 +68,7 @@ public class ImportCSV {
         ArrayList<String> columns = new ArrayList<String>();
         columns.addAll(headerMap.keySet());
 
-        String insertSqlPrefix = "insert into " + tableName + "(" + columns.get(0);
-        for (int i = 1; i < columns.size(); i++) {
-            insertSqlPrefix += "," + columns.get(i);
-        }
-        insertSqlPrefix += ") values(";
+        String insertSqlPrefix = ImportUtil.buildInsertSqlPrefix(tableName, columns, columnTypeMap);
 
         List<CSVRecord> records = parser.getRecords();
         List<String> sqls = new ArrayList<String>();
@@ -99,26 +95,8 @@ public class ImportCSV {
 
             sqls.add(sql);
         }
-        connection.setAutoCommit(false);
-        Statement statement = connection.createStatement();
 
-        for (int i = 0; i < sqls.size(); i++) {
-            String sql = sqls.get(i);
-            System.out.println(i + "\t : \t" + sql);
-            statement.execute(sql);
-        }
-
-        parser.close();
-
-        System.out.println("================================");
-        System.out.println("begin commit ...");
-
-        connection.commit();
-
-        System.out.println("finish commit ...");
-
-        statement.close();
-        connection.close();
+        ImportUtil.executeSqls(connection, sqls);
     }
 
 }
