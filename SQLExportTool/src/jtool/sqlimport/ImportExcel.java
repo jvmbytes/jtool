@@ -4,9 +4,6 @@
 package jtool.sqlimport;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
@@ -15,9 +12,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVRecord;
+import jtool.excel.ExcelUtil;
+
 import org.apache.commons.lang.StringUtils;
 
 /**
@@ -26,7 +22,7 @@ import org.apache.commons.lang.StringUtils;
  * @author Geln Yang
  * @version 1.0
  */
-public class ImportCSV {
+public class ImportExcel {
 
     public static void main(String[] args) throws Exception {
         String driverName = args[0];
@@ -34,7 +30,7 @@ public class ImportCSV {
         String userName = args[2];
         String password = args[3];
         String tableName = args[4];
-        String cvsFilePath = args[5];
+        String excelFilePath = args[5];
         String fileEncode = args[6];
         if (StringUtils.isBlank(fileEncode)) {
             fileEncode = "UTF-8";
@@ -47,26 +43,35 @@ public class ImportCSV {
         System.out.println(userName);
         System.out.println(password);
         System.out.println(tableName);
-        System.out.println(cvsFilePath);
+        System.out.println(excelFilePath);
 
-        imp(driverName, linkUrl, userName, password, tableName, cvsFilePath, fileEncode);
+        imp(driverName, linkUrl, userName, password, excelFilePath, tableName);
 
         System.out.println("------------------------");
         System.out.println("over");
     }
 
-    public static void imp(String driverName, String linkUrl, String userName, String password, String tableName, String cvsFilePath, String fileEncode) throws Exception {
+    public static void imp(String driverName, String linkUrl, String userName, String password, String excelFilePath, String tableName) throws Exception {
         Class.forName(driverName).newInstance();
         Connection connection = DriverManager.getConnection(linkUrl, userName, password);
 
+        File file = new File(excelFilePath);
+        int numberOfSheets = ExcelUtil.getNumberOfSheets(file);
+        for (int i = 0; i < numberOfSheets; i++) {
+            imp(connection, userName, tableName, file, 0);
+        }
+
+        connection.close();
+    }
+
+    public static void imp(Connection connection, String userName, String tableName, File file, int sheetIndex) throws Exception {
         Map<String, Column> columnTypeMap = ImportUtil.getColumnTypeMap(connection, userName, tableName);
 
-        File file = new File(cvsFilePath);
-        Reader reader = new InputStreamReader(new FileInputStream(file), fileEncode);
-        CSVParser parser = new CSVParser(reader, CSVFormat.EXCEL.withHeader());
-        Map<String, Integer> headerMap = parser.getHeaderMap();
-        ArrayList<String> columns = new ArrayList<String>();
-        columns.addAll(headerMap.keySet());
+        System.out.println("start import sheet:" + sheetIndex);
+        List<List<Object>> lines = ExcelUtil.readExcelLines(file, sheetIndex, 0);
+        List<Object> columns = lines.get(0);
+
+        List<List<Object>> dataList = lines.subList(1, lines.size() + 1);
 
         String insertSqlPrefix = "insert into " + tableName + "(" + columns.get(0);
         for (int i = 1; i < columns.size(); i++) {
@@ -74,12 +79,11 @@ public class ImportCSV {
         }
         insertSqlPrefix += ") values(";
 
-        List<CSVRecord> records = parser.getRecords();
         List<String> sqls = new ArrayList<String>();
-        for (int recordIndex = 0; recordIndex < records.size(); recordIndex++) {
-            CSVRecord csvRecord = records.get(recordIndex);
-            String cname = columns.get(0);
-            String cvalue = csvRecord.get(0);
+        for (int recordIndex = 0; recordIndex < dataList.size(); recordIndex++) {
+            List<Object> line = dataList.get(recordIndex);
+            String cname = columns.get(0).toString();
+            String cvalue = line.get(0).toString();
             Column column = columnTypeMap.get(cname);
 
             StringBuffer sqlBuffer = new StringBuffer();
@@ -88,8 +92,8 @@ public class ImportCSV {
                                                                                       // first
 
             for (int j = 1; j < columns.size(); j++) {
-                cname = columns.get(j);
-                cvalue = csvRecord.get(j);
+                cname = columns.get(j).toString();
+                cvalue = line.get(j).toString();
                 column = columnTypeMap.get(cname);
                 sqlBuffer.append(",");
                 ImportUtil.addColumnValue(sqlBuffer, recordIndex, cname, cvalue, column);
@@ -108,8 +112,6 @@ public class ImportCSV {
             statement.execute(sql);
         }
 
-        parser.close();
-
         System.out.println("================================");
         System.out.println("begin commit ...");
 
@@ -118,7 +120,6 @@ public class ImportCSV {
         System.out.println("finish commit ...");
 
         statement.close();
-        connection.close();
     }
 
 }
