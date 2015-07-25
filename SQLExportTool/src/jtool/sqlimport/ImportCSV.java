@@ -49,35 +49,46 @@ public class ImportCSV {
         logger.info(tableName);
         logger.info(cvsFilePath);
 
-        imp(driverName, linkUrl, userName, password, tableName, cvsFilePath, fileEncode);
+        imp(driverName, linkUrl, userName, password, tableName, cvsFilePath, fileEncode, true);
 
         logger.info("------------------------");
         logger.info("over");
     }
 
     @SuppressWarnings("resource")
-    public static void imp(String driverName, String linkUrl, String userName, String password, String tableName, String cvsFilePath, String fileEncode) throws Exception {
+    public static void imp(String driverName, String linkUrl, String userName, String password, String tableName, String cvsFilePath, String fileEncode, boolean bulkinsert) throws Exception {
         Class.forName(driverName).newInstance();
         Connection connection = DriverManager.getConnection(linkUrl, userName, password);
 
-        Map<String, Column> columnTypeMap = ImportUtil.getColumnMap(connection, userName, tableName);
+        Map<String, Column> columnMap = ImportUtil.getColumnMap(connection, userName, tableName);
 
+        logger.info("start to parse file ...");
         File file = new File(cvsFilePath);
         Reader reader = new InputStreamReader(new FileInputStream(file), fileEncode);
         CSVParser parser = new CSVParser(reader, CSVFormat.EXCEL.withHeader());
         Map<String, Integer> headerMap = parser.getHeaderMap();
         ArrayList<String> columns = new ArrayList<String>();
         columns.addAll(headerMap.keySet());
-
-        String insertSqlPrefix = ImportUtil.buildInsertSqlPrefix(tableName, columns, columnTypeMap);
-
+        logger.info("finish to parse file ...");
         List<CSVRecord> records = parser.getRecords();
+
+        if (bulkinsert) {
+            bulkinsetImp(connection, tableName, columns, columnMap, records);
+        } else {
+            onebyoneInsertImp(connection, tableName, columns, columnMap, records);
+        }
+    }
+
+    private static void onebyoneInsertImp(Connection connection, String tableName, ArrayList<String> columns, Map<String, Column> columnMap, List<CSVRecord> records) throws Exception {
+        logger.info("start to build insert sqls ...");
+        String insertSqlPrefix = ImportUtil.buildInsertSqlPrefix(tableName, columns, columnMap);
+
         List<String> sqls = new ArrayList<String>();
         for (int recordIndex = 0; recordIndex < records.size(); recordIndex++) {
             CSVRecord csvRecord = records.get(recordIndex);
             String cname = columns.get(0);
             String cvalue = csvRecord.get(0);
-            Column column = columnTypeMap.get(cname);
+            Column column = columnMap.get(cname);
 
             StringBuffer sqlBuffer = new StringBuffer();
             sqlBuffer.append(insertSqlPrefix);
@@ -87,7 +98,7 @@ public class ImportCSV {
             for (int j = 1; j < columns.size(); j++) {
                 cname = columns.get(j);
                 cvalue = csvRecord.get(j);
-                column = columnTypeMap.get(cname);
+                column = columnMap.get(cname);
                 sqlBuffer.append(",");
                 ImportUtil.addColumnValue(sqlBuffer, recordIndex, cname, cvalue, column);
             }
@@ -96,8 +107,30 @@ public class ImportCSV {
 
             sqls.add(sql);
         }
+        logger.info("finish to build insert sqls ...");
 
         ImportUtil.executeSqls(connection, sqls);
+    }
+
+    private static void bulkinsetImp(Connection connection, String tableName, ArrayList<String> columns, Map<String, Column> columnMap, List<CSVRecord> records) throws Exception {
+        OracleUtil.createBulkInsertProcedure(connection, tableName, columns, columnMap);
+
+        Object[][] dataArr = new Object[columns.size()][records.size()];
+        for (int recordIndex = 0; recordIndex < records.size(); recordIndex++) {
+            CSVRecord csvRecord = records.get(recordIndex);
+            for (int i = 0; i < columns.size(); i++) {
+                String cname = columns.get(i);
+                String cvalue = csvRecord.get(i);
+                Column column = columnMap.get(cname);
+
+                Object value = ImportUtil.getSQLFormatedValue(recordIndex, cname, cvalue, column, true);
+                dataArr[i][recordIndex] = value;
+            }
+        }
+
+        OracleUtil.bulkinsert(connection, tableName, columns, dataArr);
+
+        return;
     }
 
 }

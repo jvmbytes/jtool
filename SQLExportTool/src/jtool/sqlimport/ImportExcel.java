@@ -46,28 +46,28 @@ public class ImportExcel {
         logger.info(tableName);
         logger.info(excelFilePath);
 
-        imp(driverName, linkUrl, userName, password, excelFilePath, tableName);
+        imp(driverName, linkUrl, userName, password, excelFilePath, tableName, true);
 
         logger.info("------------------------");
         logger.info("over");
     }
 
-    public static void imp(String driverName, String linkUrl, String userName, String password, String tableName, String excelFilePath) throws Exception {
+    public static void imp(String driverName, String linkUrl, String userName, String password, String tableName, String excelFilePath, boolean bulkinsert) throws Exception {
         Class.forName(driverName).newInstance();
         Connection connection = DriverManager.getConnection(linkUrl, userName, password);
 
         File file = new File(excelFilePath);
         int numberOfSheets = ExcelUtil.getNumberOfSheets(file);
         for (int sheetIndex = 0; sheetIndex < numberOfSheets; sheetIndex++) {
-            imp(connection, userName, tableName, file, sheetIndex);
+            imp(connection, userName, tableName, file, sheetIndex, bulkinsert);
         }
 
         connection.close();
     }
 
-    @SuppressWarnings({"rawtypes"})
-    public static void imp(Connection connection, String userName, String tableName, File file, int sheetIndex) throws Exception {
-        Map<String, Column> columnTypeMap = ImportUtil.getColumnMap(connection, userName, tableName);
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public static void imp(Connection connection, String userName, String tableName, File file, int sheetIndex, boolean bulkinsert) throws Exception {
+        Map<String, Column> columnMap = ImportUtil.getColumnMap(connection, userName, tableName);
 
         logger.info("start import sheet:" + sheetIndex);
         List<List<Object>> lines = ExcelUtil.readExcelLines(file, sheetIndex, 0);
@@ -79,14 +79,41 @@ public class ImportExcel {
 
         List<List<Object>> dataList = lines.subList(1, lines.size());
 
-        String insertSqlPrefix = ImportUtil.buildInsertSqlPrefix(tableName, columns, columnTypeMap);
+        if (bulkinsert) {
+            bulkinsetImp(connection, tableName, columns, columnMap, dataList);
+        } else {
+            onebyoneInsertImp(connection, tableName, columns, columnMap, dataList);
+        }
+    }
+
+    private static void bulkinsetImp(Connection connection, String tableName, List<String> columns, Map<String, Column> columnMap, List<List<Object>> dataList) throws Exception {
+        OracleUtil.createBulkInsertProcedure(connection, tableName, columns, columnMap);
+
+        Object[][] dataArr = new Object[columns.size()][dataList.size()];
+        for (int recordIndex = 0; recordIndex < dataList.size(); recordIndex++) {
+            List<Object> csvRecord = dataList.get(recordIndex);
+            for (int i = 0; i < columns.size(); i++) {
+                String cname = columns.get(i);
+                String cvalue = (String) csvRecord.get(i);
+                Column column = columnMap.get(cname);
+
+                Object value = ImportUtil.getSQLFormatedValue(recordIndex, cname, cvalue, column, true);
+                dataArr[i][recordIndex] = value;
+            }
+        }
+
+        OracleUtil.bulkinsert(connection, tableName, columns, dataArr);
+    }
+
+    private static void onebyoneInsertImp(Connection connection, String tableName, List<String> columns, Map<String, Column> columnMap, List<List<Object>> dataList) throws Exception {
+        String insertSqlPrefix = ImportUtil.buildInsertSqlPrefix(tableName, columns, columnMap);
 
         List<String> sqls = new ArrayList<String>();
         for (int recordIndex = 0; recordIndex < dataList.size(); recordIndex++) {
             List<Object> line = dataList.get(recordIndex);
             String cname = columns.get(0).toString();
             String cvalue = line.get(0).toString();
-            Column column = columnTypeMap.get(cname);
+            Column column = columnMap.get(cname);
 
             StringBuffer sqlBuffer = new StringBuffer();
             sqlBuffer.append(insertSqlPrefix);
@@ -96,7 +123,7 @@ public class ImportExcel {
             for (int j = 1; j < columns.size(); j++) {
                 cname = columns.get(j).toString();
                 cvalue = line.get(j).toString();
-                column = columnTypeMap.get(cname);
+                column = columnMap.get(cname);
                 sqlBuffer.append(",");
                 ImportUtil.addColumnValue(sqlBuffer, recordIndex, cname, cvalue, column);
             }
@@ -107,7 +134,6 @@ public class ImportExcel {
         }
 
         ImportUtil.executeSqls(connection, sqls);
-
     }
 
 }

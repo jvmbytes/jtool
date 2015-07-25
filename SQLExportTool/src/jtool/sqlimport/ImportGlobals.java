@@ -13,6 +13,10 @@ public final class ImportGlobals {
 
     private static boolean continueWhenPkFkError = false;
 
+    private static int batchsize = 2000;
+
+    private static boolean autoCommit = false;
+
     public static boolean isContinueWhenError() {
         return continueWhenError;
     }
@@ -27,6 +31,22 @@ public final class ImportGlobals {
 
     public static void setContinueWhenPkFkError(boolean continueWhenPkFkError) {
         ImportGlobals.continueWhenPkFkError = continueWhenPkFkError;
+    }
+
+    public static int getBatchsize() {
+        return batchsize;
+    }
+
+    public static void setBatchsize(int batchsize) {
+        ImportGlobals.batchsize = batchsize;
+    }
+
+    public static boolean isAutoCommit() {
+        return autoCommit;
+    }
+
+    public static void setAutoCommit(boolean autoCommit) {
+        ImportGlobals.autoCommit = autoCommit;
     }
 
 }

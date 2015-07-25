@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,7 @@ public class ImportUtil {
     static SimpleDateFormat datetimeFormat = new SimpleDateFormat(datetimeFormatPattern);
 
     public static Map<String, Column> getColumnMap(Connection connection, String userName, String tableName) throws SQLException {
+        logger.info("start to get table column definitions ...");
         Map<String, Column> columnMap = new HashMap<String, Column>();
         DatabaseMetaData metaData = connection.getMetaData();
         ResultSet columnResultSet = metaData.getColumns(null, userName.toUpperCase(), tableName.toUpperCase(), "%");
@@ -58,12 +60,18 @@ public class ImportUtil {
 
             columnMap.put(name, column);
         }
+        logger.info("finish to get table column definitions ...");
         logger.info("column count of table " + tableName + ":" + columnMap.size());
 
         return columnMap;
     }
 
-    public static void addColumnValue(StringBuffer buffer, int rowIndex, String cname, String cvalue, Column column) throws SQLException {
+    public static void addColumnValue(StringBuffer buffer, int rowIndex, String cname, String cvalue, Column column) throws Exception {
+        Object formatedValue = getSQLFormatedValue(rowIndex, cname, cvalue, column, false);
+        buffer.append(formatedValue.toString());
+    }
+
+    public static Object getSQLFormatedValue(int rowIndex, String cname, String cvalue, Column column, boolean bulkinsert) throws Exception {
         if (column == null || cname == null) {
             throw new RuntimeException("Error Row[" + rowIndex + "] can't find column:" + cname);
         }
@@ -72,8 +80,10 @@ public class ImportUtil {
             if (!column.isNullable()) {
                 throw new SQLException("Error Row[" + rowIndex + "] the value of column[" + cname + "] should not be null!");
             }
-            buffer.append("null");
-            return;
+            if (bulkinsert) {
+                return null;
+            }
+            return "null";
         }
 
         if (cvalue.contains("'")) {
@@ -82,6 +92,7 @@ public class ImportUtil {
             logger.error("Replaced with double quotation:" + cvalue);
         }
 
+        cvalue = cvalue.trim();
         String type = column.getType();
 
         if ("NUMBER".equals(column) || "INT".equals(column)) {
@@ -95,7 +106,7 @@ public class ImportUtil {
                 throw new SQLException("Error Row[" + rowIndex + "] the value[" + cvalue + "] is not a integer!");
             }
 
-            buffer.append(cvalue);
+            return cvalue;
         }
         /* CHAR,VARCHAR,NVARCHAR */
         else if (type.indexOf("CHAR") != -1) {
@@ -103,38 +114,53 @@ public class ImportUtil {
                 throw new SQLException("Error Row[" + rowIndex + "] the length of the value[" + cvalue + "] of column[" + cname + "] is " + cvalue.length() + ", while the max length is "
                         + column.size);
             }
-            buffer.append("\'" + cvalue + "\'");
+            if (bulkinsert) {
+                return cvalue;
+            }
+            return "\'" + cvalue + "\'";
         } else if (type.indexOf("TIMESTAMP") != -1) {
             try {
-                datetimeFormat.parse(cvalue);
+                Date date = datetimeFormat.parse(cvalue);
+                if (bulkinsert) {
+                    return new java.sql.Date(date.getTime());
+                }
             } catch (ParseException e) {
                 throw new RuntimeException("Error Row[" + rowIndex + "] bad date time format value[" + cvalue + "] for column " + cname);
             }
-            buffer.append("to_date(\'" + cvalue + "\',\'yyyy/mm/dd hh24:mi:ss\')");
+            return "to_date(\'" + cvalue + "\',\'yyyy/mm/dd hh24:mi:ss\')";
         } else if (type.indexOf("DATE") != -1) {
             try {
-                dateFormat.parse(cvalue);
+                Date date = dateFormat.parse(cvalue);
+                if (bulkinsert) {
+                    return new java.sql.Date(date.getTime());
+                }
             } catch (ParseException e) {
                 throw new RuntimeException("Error Row[" + rowIndex + "] bad date format value[" + cvalue + "] for column " + cname);
             }
-            buffer.append("to_date(\'" + cvalue + "\',\'yyyy/mm/dd\')");
+            return "to_date(\'" + cvalue + "\',\'yyyy/mm/dd\')";
         } else {
-            buffer.append("\'" + cvalue + "\'");
+            if (bulkinsert) {
+                return cvalue;
+            }
+            return "\'" + cvalue + "\'";
         }
     }
 
     public static void executeSqls(Connection connection, List<String> sqls) throws SQLException {
-        connection.setAutoCommit(false);
+        connection.setAutoCommit(ImportGlobals.isAutoCommit());
         Statement statement = connection.createStatement();
         int size = sqls.size();
         logger.info("start execute sql, total size " + size);
         for (int i = 0; i < size; i++) {
             String sql = sqls.get(i);
             try {
-                if (i % 1000 == 0) {
+                statement.execute(sql);
+                if (i % ImportGlobals.getBatchsize() == 0) {
+                    if (!ImportGlobals.isAutoCommit()) {
+                        connection.commit();
+                    }
                     logger.info("executing progress:" + i + " / " + size);
                 }
-                statement.execute(sql);
             } catch (Exception e) {
                 logger.error("error to execute sql[" + i + "]: \t" + sql);
                 if (hasPkFkError(e.getMessage()) && ImportGlobals.isContinueWhenPkFkError()) {
@@ -144,15 +170,13 @@ public class ImportUtil {
                 throw e;
             }
         }
-
+        if (!ImportGlobals.isAutoCommit()) {
+            connection.commit();
+        }
         logger.info("executing progress:" + size + " / " + size);
 
         logger.info("================================");
-        logger.info("begin commit ...");
-
-        connection.commit();
-
-        logger.info("finish commit ...");
+        logger.info("finish execute ...");
 
         statement.close();
     }
