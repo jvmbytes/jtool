@@ -14,11 +14,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * @author Geln Yang
  * @version 1.0
  */
 public class ImportUtil {
+
+    private static final Logger logger = LoggerFactory.getLogger(ImportUtil.class);
+
     private static final String NUMBER_PATTER = "\\d+(\\.\\d+)?";
 
     private static final String INT_PATTERN = "\\d+";
@@ -51,11 +57,11 @@ public class ImportUtil {
             column.setNullable(nullable > 0);
 
             if (name.equals("ACHV_STATUS")) {
-                System.out.println("");
+                logger.info("");
             }
             columnTypeMap.put(name, column);
         }
-        System.out.println("column count of table " + tableName + ":" + columnTypeMap.size());
+        logger.info("column count of table " + tableName + ":" + columnTypeMap.size());
 
         return columnTypeMap;
     }
@@ -74,9 +80,9 @@ public class ImportUtil {
         }
 
         if (cvalue.contains("'")) {
-            System.err.println("Error Row[" + rowIndex + "] contains single quotation marks in column[" + cname + "]:" + cvalue);
+            logger.error("Error Row[" + rowIndex + "] contains single quotation marks in column[" + cname + "]:" + cvalue);
             cvalue = cvalue.replaceAll("'", "\"");
-            System.err.println("Replaced with double quotation:" + cvalue);
+            logger.error("Replaced with double quotation:" + cvalue);
         }
 
         String type = column.getType();
@@ -123,40 +129,51 @@ public class ImportUtil {
     public static void executeSqls(Connection connection, List<String> sqls) throws SQLException {
         connection.setAutoCommit(false);
         Statement statement = connection.createStatement();
-
-        System.out.println("start execute sql, total count " + sqls.size());
-        for (int i = 0; i < sqls.size(); i++) {
+        int size = sqls.size();
+        logger.info("start execute sql, total size " + size);
+        for (int i = 0; i < size; i++) {
             String sql = sqls.get(i);
             try {
+                if (i % 1000 == 0) {
+                    logger.info("executing progress:" + i + " / " + size);
+                }
                 statement.execute(sql);
             } catch (Exception e) {
-                System.err.println("error to execute sql[" + i + "]: \t" + sql);
+                logger.error("error to execute sql[" + i + "]: \t" + sql);
                 throw e;
             }
         }
 
-        System.out.println("================================");
-        System.out.println("begin commit ...");
+        logger.info("executing progress:" + size + " / " + size);
+
+        logger.info("================================");
+        logger.info("begin commit ...");
 
         connection.commit();
 
-        System.out.println("finish commit ...");
+        logger.info("finish commit ...");
 
         statement.close();
     }
 
     @SuppressWarnings("rawtypes")
     public static String buildInsertSqlPrefix(String tableName, List columns, Map<String, Column> columnTypeMap) throws Exception {
-        String insertSqlPrefix = "insert into " + tableName + "(" + columns.get(0);
+        String cname = (String) columns.get(0);
+        assertColumnExist(columnTypeMap, tableName, cname);
+        String insertSqlPrefix = "insert into " + tableName + "(" + cname;
         for (int i = 1; i < columns.size(); i++) {
-            String cname = (String) columns.get(i);
-            Column column = columnTypeMap.get(cname);
-            if (cname == null || column == null) {
-                throw new Exception("No column named " + cname + " in table " + tableName);
-            }
+            cname = (String) columns.get(i);
+            assertColumnExist(columnTypeMap, tableName, cname);
             insertSqlPrefix += "," + cname;
         }
         insertSqlPrefix += ") values(";
         return insertSqlPrefix;
+    }
+
+    private static void assertColumnExist(Map<String, Column> columnTypeMap, String tableName, String cname) throws Exception {
+        Column column = columnTypeMap.get(cname);
+        if (cname == null || column == null) {
+            throw new Exception("No column named " + cname + " in table " + tableName);
+        }
     }
 }

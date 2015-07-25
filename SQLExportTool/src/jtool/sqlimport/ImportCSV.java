@@ -10,7 +10,6 @@ import java.io.Reader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -18,6 +17,8 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * It's just for oracle right now!
@@ -26,6 +27,7 @@ import org.apache.commons.lang.StringUtils;
  * @version 1.0
  */
 public class ImportCSV {
+    private static final Logger logger = LoggerFactory.getLogger(ImportCSV.class);
 
     public static void main(String[] args) throws Exception {
         String driverName = args[0];
@@ -39,19 +41,18 @@ public class ImportCSV {
             fileEncode = "UTF-8";
         }
 
-        System.out.println("----------------------");
-        System.out.println(new Date());
-        System.out.println(driverName);
-        System.out.println(linkUrl);
-        System.out.println(userName);
-        System.out.println(password);
-        System.out.println(tableName);
-        System.out.println(cvsFilePath);
+        logger.info("----------------------");
+        logger.info(driverName);
+        logger.info(linkUrl);
+        logger.info(userName);
+        logger.info(password);
+        logger.info(tableName);
+        logger.info(cvsFilePath);
 
         imp(driverName, linkUrl, userName, password, tableName, cvsFilePath, fileEncode);
 
-        System.out.println("------------------------");
-        System.out.println("over");
+        logger.info("------------------------");
+        logger.info("over");
     }
 
     @SuppressWarnings("resource")

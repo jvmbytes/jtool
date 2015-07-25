@@ -7,13 +7,14 @@ import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
 import jtool.excel.ExcelUtil;
 
 import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * It's just for oracle right now!
@@ -22,6 +23,8 @@ import org.apache.commons.lang.StringUtils;
  * @version 1.0
  */
 public class ImportExcel {
+
+    private static final Logger logger = LoggerFactory.getLogger(ImportExcel.class);
 
     public static void main(String[] args) throws Exception {
         String driverName = args[0];
@@ -35,19 +38,18 @@ public class ImportExcel {
             fileEncode = "UTF-8";
         }
 
-        System.out.println("----------------------");
-        System.out.println(new Date());
-        System.out.println(driverName);
-        System.out.println(linkUrl);
-        System.out.println(userName);
-        System.out.println(password);
-        System.out.println(tableName);
-        System.out.println(excelFilePath);
+        logger.info("----------------------");
+        logger.info(driverName);
+        logger.info(linkUrl);
+        logger.info(userName);
+        logger.info(password);
+        logger.info(tableName);
+        logger.info(excelFilePath);
 
         imp(driverName, linkUrl, userName, password, excelFilePath, tableName);
 
-        System.out.println("------------------------");
-        System.out.println("over");
+        logger.info("------------------------");
+        logger.info("over");
     }
 
     public static void imp(String driverName, String linkUrl, String userName, String password, String tableName, String excelFilePath) throws Exception {
@@ -67,10 +69,10 @@ public class ImportExcel {
     public static void imp(Connection connection, String userName, String tableName, File file, int sheetIndex) throws Exception {
         Map<String, Column> columnTypeMap = ImportUtil.getColumnTypeMap(connection, userName, tableName);
 
-        System.out.println("start import sheet:" + sheetIndex);
+        logger.info("start import sheet:" + sheetIndex);
         List<List<Object>> lines = ExcelUtil.readExcelLines(file, sheetIndex, 0);
         if (lines == null || lines.size() < 2) {
-            System.out.println("no content in sheet:" + sheetIndex);
+            logger.info("no content in sheet:" + sheetIndex);
             return;
         }
         List columns = lines.get(0);
