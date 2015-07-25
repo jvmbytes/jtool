@@ -37,8 +37,8 @@ public class ImportUtil {
 
     static SimpleDateFormat datetimeFormat = new SimpleDateFormat(datetimeFormatPattern);
 
-    public static Map<String, Column> getColumnTypeMap(Connection connection, String userName, String tableName) throws SQLException {
-        Map<String, Column> columnTypeMap = new HashMap<String, Column>();
+    public static Map<String, Column> getColumnMap(Connection connection, String userName, String tableName) throws SQLException {
+        Map<String, Column> columnMap = new HashMap<String, Column>();
         DatabaseMetaData metaData = connection.getMetaData();
         ResultSet columnResultSet = metaData.getColumns(null, userName.toUpperCase(), tableName.toUpperCase(), "%");
 
@@ -56,14 +56,11 @@ public class ImportUtil {
             column.setDecimalDigits(digits);
             column.setNullable(nullable > 0);
 
-            if (name.equals("ACHV_STATUS")) {
-                logger.info("");
-            }
-            columnTypeMap.put(name, column);
+            columnMap.put(name, column);
         }
-        logger.info("column count of table " + tableName + ":" + columnTypeMap.size());
+        logger.info("column count of table " + tableName + ":" + columnMap.size());
 
-        return columnTypeMap;
+        return columnMap;
     }
 
     public static void addColumnValue(StringBuffer buffer, int rowIndex, String cname, String cvalue, Column column) throws SQLException {
@@ -140,6 +137,10 @@ public class ImportUtil {
                 statement.execute(sql);
             } catch (Exception e) {
                 logger.error("error to execute sql[" + i + "]: \t" + sql);
+                if (hasPkFkError(e.getMessage()) && ImportGlobals.isContinueWhenPkFkError()) {
+                    logger.error(e.getMessage());
+                    continue;
+                }
                 throw e;
             }
         }
@@ -156,22 +157,30 @@ public class ImportUtil {
         statement.close();
     }
 
+    /**
+     * ORA-00001: 违反唯一约束条件 (.) <br>
+     * ORA-02261: 表中已存在这样的唯一关键字或主键<br>
+     */
+    private static boolean hasPkFkError(String message) {
+        return message.contains("ORA-02261") || message.contains("ORA-00001");
+    }
+
     @SuppressWarnings("rawtypes")
-    public static String buildInsertSqlPrefix(String tableName, List columns, Map<String, Column> columnTypeMap) throws Exception {
+    public static String buildInsertSqlPrefix(String tableName, List columns, Map<String, Column> columnMap) throws Exception {
         String cname = (String) columns.get(0);
-        assertColumnExist(columnTypeMap, tableName, cname);
+        assertColumnExist(columnMap, tableName, cname);
         String insertSqlPrefix = "insert into " + tableName + "(" + cname;
         for (int i = 1; i < columns.size(); i++) {
             cname = (String) columns.get(i);
-            assertColumnExist(columnTypeMap, tableName, cname);
+            assertColumnExist(columnMap, tableName, cname);
             insertSqlPrefix += "," + cname;
         }
         insertSqlPrefix += ") values(";
         return insertSqlPrefix;
     }
 
-    private static void assertColumnExist(Map<String, Column> columnTypeMap, String tableName, String cname) throws Exception {
-        Column column = columnTypeMap.get(cname);
+    private static void assertColumnExist(Map<String, Column> columnMap, String tableName, String cname) throws Exception {
+        Column column = columnMap.get(cname);
         if (cname == null || column == null) {
             throw new Exception("No column named " + cname + " in table " + tableName);
         }

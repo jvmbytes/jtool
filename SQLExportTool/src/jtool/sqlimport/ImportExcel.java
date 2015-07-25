@@ -67,7 +67,7 @@ public class ImportExcel {
 
     @SuppressWarnings({"rawtypes"})
     public static void imp(Connection connection, String userName, String tableName, File file, int sheetIndex) throws Exception {
-        Map<String, Column> columnTypeMap = ImportUtil.getColumnTypeMap(connection, userName, tableName);
+        Map<String, Column> columnTypeMap = ImportUtil.getColumnMap(connection, userName, tableName);
 
         logger.info("start import sheet:" + sheetIndex);
         List<List<Object>> lines = ExcelUtil.readExcelLines(file, sheetIndex, 0);

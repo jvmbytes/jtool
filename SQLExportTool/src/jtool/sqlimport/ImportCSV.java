@@ -60,7 +60,7 @@ public class ImportCSV {
         Class.forName(driverName).newInstance();
         Connection connection = DriverManager.getConnection(linkUrl, userName, password);
 
-        Map<String, Column> columnTypeMap = ImportUtil.getColumnTypeMap(connection, userName, tableName);
+        Map<String, Column> columnTypeMap = ImportUtil.getColumnMap(connection, userName, tableName);
 
         File file = new File(cvsFilePath);
         Reader reader = new InputStreamReader(new FileInputStream(file), fileEncode);
