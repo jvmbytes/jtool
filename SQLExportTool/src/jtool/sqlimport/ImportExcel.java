@@ -6,11 +6,12 @@ package jtool.sqlimport;
 import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import jtool.excel.ExcelUtil;
+import jtool.sqlimport.domain.DataHolder;
+import jtool.sqlimport.domain.RowHolder;
 
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
@@ -77,63 +78,37 @@ public class ImportExcel {
         }
         List columns = lines.get(0);
 
-        List<List<Object>> dataList = lines.subList(1, lines.size());
+        final List<List<Object>> dataList = lines.subList(1, lines.size());
 
+        DataHolder dataHoler = new DataHolder() {
+
+            @Override
+            public int getSize() {
+                return dataList.size();
+            }
+
+            @Override
+            public RowHolder getRow(int i) {
+                final List<Object> list = dataList.get(i);
+                return new RowHolder() {
+
+                    @Override
+                    public int size() {
+                        return list.size();
+                    }
+
+                    @Override
+                    public Object get(int i) {
+                        return list.get(i);
+                    }
+                };
+            }
+        };
         if (bulkinsert) {
-            bulkinsetImp(connection, tableName, columns, columnMap, dataList);
+            ImportUtil.bulkinsetImp(connection, tableName, columns, columnMap, dataHoler);
         } else {
-            onebyoneInsertImp(connection, tableName, columns, columnMap, dataList);
+            ImportUtil.onebyoneInsertImp(connection, tableName, columns, columnMap, dataHoler);
         }
-    }
-
-    private static void bulkinsetImp(Connection connection, String tableName, List<String> columns, Map<String, Column> columnMap, List<List<Object>> dataList) throws Exception {
-        OracleUtil.createBulkInsertProcedure(connection, tableName, columns, columnMap);
-
-        Object[][] dataArr = new Object[columns.size()][dataList.size()];
-        for (int recordIndex = 0; recordIndex < dataList.size(); recordIndex++) {
-            List<Object> csvRecord = dataList.get(recordIndex);
-            for (int i = 0; i < columns.size(); i++) {
-                String cname = columns.get(i);
-                String cvalue = (String) csvRecord.get(i);
-                Column column = columnMap.get(cname);
-
-                Object value = ImportUtil.getSQLFormatedValue(recordIndex, cname, cvalue, column, true);
-                dataArr[i][recordIndex] = value;
-            }
-        }
-
-        OracleUtil.bulkinsert(connection, tableName, columns, dataArr);
-    }
-
-    private static void onebyoneInsertImp(Connection connection, String tableName, List<String> columns, Map<String, Column> columnMap, List<List<Object>> dataList) throws Exception {
-        String insertSqlPrefix = ImportUtil.buildInsertSqlPrefix(tableName, columns, columnMap);
-
-        List<String> sqls = new ArrayList<String>();
-        for (int recordIndex = 0; recordIndex < dataList.size(); recordIndex++) {
-            List<Object> line = dataList.get(recordIndex);
-            String cname = columns.get(0).toString();
-            String cvalue = line.get(0).toString();
-            Column column = columnMap.get(cname);
-
-            StringBuffer sqlBuffer = new StringBuffer();
-            sqlBuffer.append(insertSqlPrefix);
-            ImportUtil.addColumnValue(sqlBuffer, recordIndex, cname, cvalue, column); // add
-                                                                                      // first
-
-            for (int j = 1; j < columns.size(); j++) {
-                cname = columns.get(j).toString();
-                cvalue = line.get(j).toString();
-                column = columnMap.get(cname);
-                sqlBuffer.append(",");
-                ImportUtil.addColumnValue(sqlBuffer, recordIndex, cname, cvalue, column);
-            }
-            sqlBuffer.append(")");
-            String sql = sqlBuffer.toString();
-
-            sqls.add(sql);
-        }
-
-        ImportUtil.executeSqls(connection, sqls);
     }
 
 }

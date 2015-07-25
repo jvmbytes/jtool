@@ -13,6 +13,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import jtool.sqlimport.domain.DataHolder;
+import jtool.sqlimport.domain.RowHolder;
+
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -70,67 +73,37 @@ public class ImportCSV {
         ArrayList<String> columns = new ArrayList<String>();
         columns.addAll(headerMap.keySet());
         logger.info("finish to parse file ...");
-        List<CSVRecord> records = parser.getRecords();
+        final List<CSVRecord> records = parser.getRecords();
+        DataHolder dataHolder = new DataHolder() {
+
+            @Override
+            public RowHolder getRow(int i) {
+                final CSVRecord csvRecord = records.get(i);
+                return new RowHolder() {
+
+                    @Override
+                    public int size() {
+                        return csvRecord.size();
+                    }
+
+                    @Override
+                    public Object get(int i) {
+                        return csvRecord.get(i);
+                    }
+                };
+            }
+
+            @Override
+            public int getSize() {
+                return records.size();
+            }
+        };
 
         if (bulkinsert) {
-            bulkinsetImp(connection, tableName, columns, columnMap, records);
+            ImportUtil.bulkinsetImp(connection, tableName, columns, columnMap, dataHolder);
         } else {
-            onebyoneInsertImp(connection, tableName, columns, columnMap, records);
+            ImportUtil.onebyoneInsertImp(connection, tableName, columns, columnMap, dataHolder);
         }
-    }
-
-    private static void onebyoneInsertImp(Connection connection, String tableName, ArrayList<String> columns, Map<String, Column> columnMap, List<CSVRecord> records) throws Exception {
-        logger.info("start to build insert sqls ...");
-        String insertSqlPrefix = ImportUtil.buildInsertSqlPrefix(tableName, columns, columnMap);
-
-        List<String> sqls = new ArrayList<String>();
-        for (int recordIndex = 0; recordIndex < records.size(); recordIndex++) {
-            CSVRecord csvRecord = records.get(recordIndex);
-            String cname = columns.get(0);
-            String cvalue = csvRecord.get(0);
-            Column column = columnMap.get(cname);
-
-            StringBuffer sqlBuffer = new StringBuffer();
-            sqlBuffer.append(insertSqlPrefix);
-            ImportUtil.addColumnValue(sqlBuffer, recordIndex, cname, cvalue, column); // add
-                                                                                      // first
-
-            for (int j = 1; j < columns.size(); j++) {
-                cname = columns.get(j);
-                cvalue = csvRecord.get(j);
-                column = columnMap.get(cname);
-                sqlBuffer.append(",");
-                ImportUtil.addColumnValue(sqlBuffer, recordIndex, cname, cvalue, column);
-            }
-            sqlBuffer.append(")");
-            String sql = sqlBuffer.toString();
-
-            sqls.add(sql);
-        }
-        logger.info("finish to build insert sqls ...");
-
-        ImportUtil.executeSqls(connection, sqls);
-    }
-
-    private static void bulkinsetImp(Connection connection, String tableName, ArrayList<String> columns, Map<String, Column> columnMap, List<CSVRecord> records) throws Exception {
-        OracleUtil.createBulkInsertProcedure(connection, tableName, columns, columnMap);
-
-        Object[][] dataArr = new Object[columns.size()][records.size()];
-        for (int recordIndex = 0; recordIndex < records.size(); recordIndex++) {
-            CSVRecord csvRecord = records.get(recordIndex);
-            for (int i = 0; i < columns.size(); i++) {
-                String cname = columns.get(i);
-                String cvalue = csvRecord.get(i);
-                Column column = columnMap.get(cname);
-
-                Object value = ImportUtil.getSQLFormatedValue(recordIndex, cname, cvalue, column, true);
-                dataArr[i][recordIndex] = value;
-            }
-        }
-
-        OracleUtil.bulkinsert(connection, tableName, columns, dataArr);
-
-        return;
     }
 
 }

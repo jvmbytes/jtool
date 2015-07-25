@@ -80,11 +80,31 @@ public class OracleUtil {
         statement.close();
         logger.info("finish to create bulk insert procedure ...");
         return procedureName;
-
     }
 
+    public static String dropBulkInsertProcedure(Connection connection, String tableName, List<String> columns) throws SQLException {
+        Statement statement = connection.createStatement();
+        String procedureName = getBulkInsertProcedureName(tableName);
+        logger.info("start to drop bulk insert procedure:" + procedureName);
+        statement.execute("drop procedure " + procedureName);
+        for (int i = 0; i < columns.size(); i++) {
+            String typeName = getTypeName(tableName, i);
+            statement.execute("drop type " + typeName);
+        }
+        statement.close();
+        logger.info("finish to drop bulk insert procedure ...");
+        return procedureName;
+    }
+
+    /**
+     * Oracle所有对象名称，字段名称有30个字符长度的限制
+     */
     private static String getBulkInsertProcedureName(String tableName) {
-        return "BULKINSERT_" + tableName;
+        String name = "BI_" + tableName;
+        if (name.length() > 30) {
+            return name.substring(0, 30);
+        }
+        return name;
     }
 
     private static String getTypeName(String tableName, int i) {
@@ -92,6 +112,8 @@ public class OracleUtil {
     }
 
     public static void bulkinsert(Connection connection, String tableName, List<String> columns, Object[][] dataArr) throws SQLException {
+        int recordSize = dataArr[0].length;
+        logger.info("start to bulk insert " + recordSize + " records ...");
         StringBuffer callBuffer = new StringBuffer();
         callBuffer.append("{ call " + getBulkInsertProcedureName(tableName) + "(");
         callBuffer.append("?");
@@ -108,5 +130,6 @@ public class OracleUtil {
         }
         cstmt.execute();
         connection.commit();
+        logger.info("finish to bulk insert " + recordSize + " records ...");
     }
 }

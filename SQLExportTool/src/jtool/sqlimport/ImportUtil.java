@@ -10,10 +10,16 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import jtool.sqlimport.domain.DataHolder;
+import jtool.sqlimport.domain.RowHolder;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +43,20 @@ public class ImportUtil {
     static String datetimeFormatPattern = "yyyy/MM/dd HH:mm:ss";
 
     static SimpleDateFormat datetimeFormat = new SimpleDateFormat(datetimeFormatPattern);
+
+    public static Set<String> getPrimayKeys(Connection connection, String userName, String tableName) throws SQLException {
+        logger.info("start to get table primary keys ...");
+        Set<String> columnSet = new HashSet<String>();
+        DatabaseMetaData metaData = connection.getMetaData();
+        ResultSet rs = metaData.getPrimaryKeys(null, userName.toUpperCase(), tableName.toUpperCase());
+        while (rs.next()) {
+            String name = rs.getString("COLUMN_NAME");
+            columnSet.add(name);
+        }
+        logger.info("finish to get table primary keys:" + columnSet);
+
+        return columnSet;
+    }
 
     public static Map<String, Column> getColumnMap(Connection connection, String userName, String tableName) throws SQLException {
         logger.info("start to get table column definitions ...");
@@ -76,14 +96,22 @@ public class ImportUtil {
             throw new RuntimeException("Error Row[" + rowIndex + "] can't find column:" + cname);
         }
 
-        if (cvalue == null || "".equals(cvalue)) {
-            if (!column.isNullable()) {
-                throw new SQLException("Error Row[" + rowIndex + "] the value of column[" + cname + "] should not be null!");
+        String type = column.getType();
+
+        if (cvalue == null || cvalue.trim().length() == 0) {
+            if (cvalue != null && ("NUMBER".equals(type) || "INT".equals(type))) {
+                cvalue = cvalue.trim();
             }
-            if (bulkinsert) {
-                return null;
+
+            if (cvalue == null || "".equals(cvalue)) {
+                if (!column.isNullable()) {
+                    throw new SQLException("Error Row[" + rowIndex + "] the value of column[" + cname + "] should not be null!");
+                }
+                if (bulkinsert) {
+                    return null;
+                }
+                return "null";
             }
-            return "null";
         }
 
         if (cvalue.contains("'")) {
@@ -93,9 +121,8 @@ public class ImportUtil {
         }
 
         cvalue = cvalue.trim();
-        String type = column.getType();
 
-        if ("NUMBER".equals(column) || "INT".equals(column)) {
+        if ("NUMBER".equals(type) || "INT".equals(type)) {
             if (cvalue.length() > column.size) {
                 throw new SQLException("Error Row[" + rowIndex + "] the size of the value[" + cvalue + "] of column[" + cname + "] is " + cvalue.length() + ", while the max size is " + column.size);
             }
@@ -156,7 +183,7 @@ public class ImportUtil {
             try {
                 statement.execute(sql);
                 if (i % ImportGlobals.getBatchsize() == 0) {
-                    if (!ImportGlobals.isAutoCommit()) {
+                    if (i > 0 && !ImportGlobals.isAutoCommit()) {
                         connection.commit();
                     }
                     logger.info("executing progress:" + i + " / " + size);
@@ -179,6 +206,58 @@ public class ImportUtil {
         logger.info("finish execute ...");
 
         statement.close();
+    }
+
+    public static void bulkinsetImp(Connection connection, String tableName, List<String> columns, Map<String, Column> columnMap, DataHolder dataHolder) throws Exception {
+        OracleUtil.createBulkInsertProcedure(connection, tableName, columns, columnMap);
+
+        logger.info("start to parse data ...");
+        Object[][] dataArr = new Object[columns.size()][dataHolder.getSize()];
+        for (int recordIndex = 0; recordIndex < dataHolder.getSize(); recordIndex++) {
+            RowHolder row = dataHolder.getRow(recordIndex);
+            for (int i = 0; i < columns.size(); i++) {
+                String cname = columns.get(i);
+                String cvalue = (String) row.get(i);
+                Column column = columnMap.get(cname);
+
+                Object value = ImportUtil.getSQLFormatedValue(recordIndex, cname, cvalue, column, true);
+                dataArr[i][recordIndex] = value;
+            }
+        }
+        logger.info("finish to parse data ...");
+
+        OracleUtil.bulkinsert(connection, tableName, columns, dataArr);
+        OracleUtil.dropBulkInsertProcedure(connection, tableName, columns);
+        return;
+    }
+
+    public static void onebyoneInsertImp(Connection connection, String tableName, List<String> columns, Map<String, Column> columnMap, DataHolder dataHolder) throws Exception {
+        logger.info("start to build insert sqls ...");
+        String insertSqlPrefix = ImportUtil.buildInsertSqlPrefix(tableName, columns, columnMap);
+
+        List<String> sqls = new ArrayList<String>();
+        for (int recordIndex = 0; recordIndex < dataHolder.getSize(); recordIndex++) {
+            RowHolder row = dataHolder.getRow(recordIndex);
+            StringBuffer sqlBuffer = new StringBuffer();
+            sqlBuffer.append(insertSqlPrefix);
+
+            for (int j = 0; j < columns.size(); j++) {
+                String cname = columns.get(0);
+                String cvalue = (String) row.get(0);
+                Column column = columnMap.get(cname);
+                if (j > 0) {
+                    sqlBuffer.append(",");
+                }
+                ImportUtil.addColumnValue(sqlBuffer, recordIndex, cname, cvalue, column);
+            }
+            sqlBuffer.append(")");
+            String sql = sqlBuffer.toString();
+
+            sqls.add(sql);
+        }
+        logger.info("finish to build insert sqls ...");
+
+        ImportUtil.executeSqls(connection, sqls);
     }
 
     /**
