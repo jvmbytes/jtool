@@ -100,7 +100,7 @@ public class ImportCSV {
         };
 
         if (bulkinsert) {
-            ImportUtil.bulkinsetImp(connection, tableName, columns, columnMap, dataHolder);
+            ImportUtil.bulkinsetImp(connection, userName, tableName, columns, columnMap, dataHolder);
         } else {
             ImportUtil.onebyoneInsertImp(connection, tableName, columns, columnMap, dataHolder);
         }

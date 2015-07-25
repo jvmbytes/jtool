@@ -44,7 +44,7 @@ public class ImportUtil {
 
     static SimpleDateFormat datetimeFormat = new SimpleDateFormat(datetimeFormatPattern);
 
-    public static Set<String> getPrimayKeys(Connection connection, String userName, String tableName) throws SQLException {
+    public static Set<String> getPrimaryKeys(Connection connection, String userName, String tableName) throws SQLException {
         logger.info("start to get table primary keys ...");
         Set<String> columnSet = new HashSet<String>();
         DatabaseMetaData metaData = connection.getMetaData();
@@ -208,13 +208,16 @@ public class ImportUtil {
         statement.close();
     }
 
-    public static void bulkinsetImp(Connection connection, String tableName, List<String> columns, Map<String, Column> columnMap, DataHolder dataHolder) throws Exception {
+    public static void bulkinsetImp(Connection connection, String userName, String tableName, List<String> columns, Map<String, Column> columnMap, DataHolder dataHolder) throws Exception {
         OracleUtil.createBulkInsertProcedure(connection, tableName, columns, columnMap);
+        Set<String> primaryKeys = ImportUtil.getPrimaryKeys(connection, userName, tableName);
+        Set<String> primaryKeyValueSet = new HashSet<String>();
 
         logger.info("start to parse data ...");
         Object[][] dataArr = new Object[columns.size()][dataHolder.getSize()];
         for (int recordIndex = 0; recordIndex < dataHolder.getSize(); recordIndex++) {
             RowHolder row = dataHolder.getRow(recordIndex);
+            String primaryKeyValue = "";
             for (int i = 0; i < columns.size(); i++) {
                 String cname = columns.get(i);
                 String cvalue = (String) row.get(i);
@@ -222,6 +225,17 @@ public class ImportUtil {
 
                 Object value = ImportUtil.getSQLFormatedValue(recordIndex, cname, cvalue, column, true);
                 dataArr[i][recordIndex] = value;
+
+                if (primaryKeys.contains(cname)) {
+                    primaryKeyValue += value.toString();
+                }
+            }
+
+            primaryKeyValue = primaryKeyValue.trim();
+            if (primaryKeyValueSet.contains(primaryKeyValue)) {
+                throw new Exception("Row[" + recordIndex + "] duplicated primay key value:" + primaryKeyValue);
+            } else {
+                primaryKeyValueSet.add(primaryKeyValue);
             }
         }
         logger.info("finish to parse data ...");

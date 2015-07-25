@@ -105,7 +105,7 @@ public class ImportExcel {
             }
         };
         if (bulkinsert) {
-            ImportUtil.bulkinsetImp(connection, tableName, columns, columnMap, dataHoler);
+            ImportUtil.bulkinsetImp(connection, userName, tableName, columns, columnMap, dataHoler);
         } else {
             ImportUtil.onebyoneInsertImp(connection, tableName, columns, columnMap, dataHoler);
         }
