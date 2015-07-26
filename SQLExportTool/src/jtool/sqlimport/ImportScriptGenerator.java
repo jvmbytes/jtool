@@ -14,13 +14,7 @@ import java.util.regex.Pattern;
 public class ImportScriptGenerator {
     static Pattern fileNamePattern = Pattern.compile("\\d+[\\-_]*([A-Z]+[A-Z_0-9]*)[^A-Z0-9_]*[^\\.]*\\.([A-Z]+)", Pattern.CASE_INSENSITIVE);
 
-    public static void main(String[] args) throws Exception {
-        String dataDir = "F:\\ProjectDocument\\BOCCFC\\3.DB\\crm2bpm\\data2\\";
-
-        generateScript(dataDir);
-    }
-
-    private static void generateScript(String dataDir) throws Exception {
+    public static void generateScript(String dataDir) throws Exception {
         File dir = new File(dataDir);
         String[] files = dir.list();
         for (String file : files) {
@@ -32,9 +26,9 @@ public class ImportScriptGenerator {
             String suffix = matcher.group(2);
 
             if (suffix.equalsIgnoreCase("csv")) {
-                System.out.println("ImportCSV.imp(driver, url, user, password, \"" + tableName + "\", baseFilePath + \"" + file + "\", encode,true);");
+                System.out.println("ImportCSV.imp(driver, url, user, password, \"" + tableName + "\", baseFilePath + \"" + file + "\", encode, true);");
             } else if (suffix.toLowerCase().contains("xls")) {
-                System.out.println("ImportExcel.imp(driver, url, user, password, \"" + tableName + "\", baseFilePath + \"" + file + "\");");
+                System.out.println("ImportExcel.imp(driver, url, user, password, \"" + tableName + "\", baseFilePath + \"" + file + "\", true);");
             } else {
                 throw new Exception("unknow file suffix:" + file);
             }

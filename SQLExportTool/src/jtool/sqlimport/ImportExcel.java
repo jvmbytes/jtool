@@ -76,7 +76,9 @@ public class ImportExcel {
             logger.info("no content in sheet:" + sheetIndex);
             return;
         }
+
         List columns = lines.get(0);
+        columns = ImportUtil.formatColumnNames(columns);
 
         final List<List<Object>> dataList = lines.subList(1, lines.size());
 
@@ -99,6 +101,9 @@ public class ImportExcel {
 
                     @Override
                     public Object get(int i) {
+                        if (list.size() <= i) {
+                            return null;
+                        }
                         return list.get(i);
                     }
                 };

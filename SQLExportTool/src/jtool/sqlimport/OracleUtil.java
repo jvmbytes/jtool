@@ -23,9 +23,8 @@ import org.slf4j.LoggerFactory;
 public class OracleUtil {
     private static final Logger logger = LoggerFactory.getLogger(OracleUtil.class);
 
-    public static String createBulkInsertProcedure(Connection connection, String tableName, List<String> columns, Map<String, Column> columnMap) throws SQLException {
+    public static String createBulkInsertProcedure(Connection connection, String tableName, List<String> columns, Map<String, Column> columnMap) throws Exception {
         Statement statement = connection.createStatement();
-
         String procedureName = getBulkInsertProcedureName(tableName);
         logger.info("start to create bulk insert procedure:" + procedureName);
 
@@ -38,6 +37,9 @@ public class OracleUtil {
             String col = columns.get(i);
             String typeName = getTypeName(tableName, i);
             Column column = columnMap.get(col);
+            if (column == null) {
+                throw new Exception("can't find column[" + col + "]");
+            }
             String type = column.getType();
             int size = column.getSize();
             int decimalDigits = column.getDecimalDigits();
@@ -108,7 +110,11 @@ public class OracleUtil {
     }
 
     private static String getTypeName(String tableName, int i) {
-        return tableName + "_T" + i;
+        String name = tableName + "_T" + i;
+        if (name.length() > 30) {
+            return name.substring(name.length() - 30);
+        }
+        return name;
     }
 
     public static void bulkinsert(Connection connection, String tableName, List<String> columns, Object[][] dataArr) throws SQLException {
@@ -131,5 +137,14 @@ public class OracleUtil {
         cstmt.execute();
         connection.commit();
         logger.info("finish to bulk insert " + recordSize + " records ...");
+    }
+
+    /**
+     * ORA-00001: 违反唯一约束条件 (.) <br>
+     * ORA-02261: 表中已存在这样的唯一关键字或主键<br>
+     * ORA-02291:
+     */
+    public static boolean hasPkFkError(String message) {
+        return message.contains("ORA-02261") || message.contains("ORA-00001") || message.contains("ORA-02291");
     }
 }

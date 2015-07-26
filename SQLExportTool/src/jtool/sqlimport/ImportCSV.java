@@ -70,8 +70,10 @@ public class ImportCSV {
         Reader reader = new InputStreamReader(new FileInputStream(file), fileEncode);
         CSVParser parser = new CSVParser(reader, CSVFormat.EXCEL.withHeader());
         Map<String, Integer> headerMap = parser.getHeaderMap();
-        ArrayList<String> columns = new ArrayList<String>();
+        List<String> columns = new ArrayList<String>();
         columns.addAll(headerMap.keySet());
+        columns = ImportUtil.formatColumnNames(columns);
+
         logger.info("finish to parse file ...");
         final List<CSVRecord> records = parser.getRecords();
         DataHolder dataHolder = new DataHolder() {

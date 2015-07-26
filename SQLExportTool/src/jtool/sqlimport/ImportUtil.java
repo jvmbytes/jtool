@@ -11,6 +11,7 @@ import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -115,12 +116,38 @@ public class ImportUtil {
         }
 
         if (cvalue.contains("'")) {
-            logger.error("Error Row[" + rowIndex + "] contains single quotation marks in column[" + cname + "]:" + cvalue);
-            cvalue = cvalue.replaceAll("'", "\"");
-            logger.error("Replaced with double quotation:" + cvalue);
+            String rvalue = cvalue.replaceAll("'", "\"");
+            logger.error("Error Row[" + rowIndex + "] contains single quotation marks in column[" + cname + "], change value from [" + cvalue + "] to [" + rvalue + "]");
+            cvalue = rvalue;
         }
 
         cvalue = cvalue.trim();
+        if ((cname.contains("_TEL") || cname.contains("PHONE") || cname.contains("MOBILE")) && cvalue.length() > 0) {
+            cvalue = cvalue.replaceAll(" ", "");
+            cvalue = cvalue.replaceAll("０", "0");
+            cvalue = cvalue.replaceAll("１", "1");
+            cvalue = cvalue.replaceAll("２", "2");
+            cvalue = cvalue.replaceAll("３", "3");
+            cvalue = cvalue.replaceAll("４", "4");
+            cvalue = cvalue.replaceAll("５", "5");
+            cvalue = cvalue.replaceAll("６", "6");
+            cvalue = cvalue.replaceAll("７", "7");
+            cvalue = cvalue.replaceAll("８", "8");
+            cvalue = cvalue.replaceAll("９", "9");
+            cvalue = cvalue.replaceAll(",", "");
+            cvalue = cvalue.replaceAll("？", "");
+            cvalue = cvalue.replaceAll("`", "");
+            cvalue = cvalue.replaceAll("—", "-");
+            cvalue = cvalue.replaceAll("——", "-");
+            cvalue = cvalue.replaceAll("）", ")");
+            cvalue = cvalue.replaceAll("（", "(");
+
+            String rvalue = cvalue.replaceAll("[^0-9\\-\\(\\)]", "");
+            if (!rvalue.equals(cvalue)) {
+                logger.warn("Error Row[" + rowIndex + "] wrong tel/mobile/phone number format, change it from [" + cvalue + "] to [" + rvalue + "]");
+                cvalue = rvalue;
+            }
+        }
 
         if ("NUMBER".equals(type) || "INT".equals(type)) {
             if (cvalue.length() > column.size) {
@@ -177,31 +204,37 @@ public class ImportUtil {
         connection.setAutoCommit(ImportGlobals.isAutoCommit());
         Statement statement = connection.createStatement();
         int size = sqls.size();
+        int successCount = 0;
+        int errorCount = 0;
         logger.info("start execute sql, total size " + size);
         for (int i = 0; i < size; i++) {
             String sql = sqls.get(i);
             try {
                 statement.execute(sql);
-                if (i % ImportGlobals.getBatchsize() == 0) {
-                    if (i > 0 && !ImportGlobals.isAutoCommit()) {
-                        connection.commit();
-                    }
-                    logger.info("executing progress:" + i + " / " + size);
-                }
             } catch (Exception e) {
                 logger.error("error to execute sql[" + i + "]: \t" + sql);
-                if (hasPkFkError(e.getMessage()) && ImportGlobals.isContinueWhenPkFkError()) {
+                errorCount++;
+                if (OracleUtil.hasPkFkError(e.getMessage()) && ImportGlobals.isContinueWhenPkFkError()) {
                     logger.error(e.getMessage());
                     continue;
                 }
                 throw e;
             }
+
+            if (i % ImportGlobals.getBatchsize() == 0) {
+                if (i > 0 && !ImportGlobals.isAutoCommit()) {
+                    connection.commit();
+                }
+                logger.info("executing progress:" + i + " / " + size);
+            }
+
+            successCount++;
         }
         if (!ImportGlobals.isAutoCommit()) {
             connection.commit();
         }
         logger.info("executing progress:" + size + " / " + size);
-
+        logger.info("success count:" + successCount + ", error count:" + errorCount);
         logger.info("================================");
         logger.info("finish execute ...");
 
@@ -209,12 +242,13 @@ public class ImportUtil {
     }
 
     public static void bulkinsetImp(Connection connection, String userName, String tableName, List<String> columns, Map<String, Column> columnMap, DataHolder dataHolder) throws Exception {
-        OracleUtil.createBulkInsertProcedure(connection, tableName, columns, columnMap);
         Set<String> primaryKeys = ImportUtil.getPrimaryKeys(connection, userName, tableName);
         Set<String> primaryKeyValueSet = new HashSet<String>();
 
         logger.info("start to parse data ...");
         Object[][] dataArr = new Object[columns.size()][dataHolder.getSize()];
+        int exactDataIndex = 0;
+        int errorDataCount = 0;
         for (int recordIndex = 0; recordIndex < dataHolder.getSize(); recordIndex++) {
             RowHolder row = dataHolder.getRow(recordIndex);
             String primaryKeyValue = "";
@@ -224,7 +258,7 @@ public class ImportUtil {
                 Column column = columnMap.get(cname);
 
                 Object value = ImportUtil.getSQLFormatedValue(recordIndex, cname, cvalue, column, true);
-                dataArr[i][recordIndex] = value;
+                dataArr[i][exactDataIndex] = value;
 
                 if (primaryKeys.contains(cname)) {
                     primaryKeyValue += value.toString();
@@ -233,13 +267,28 @@ public class ImportUtil {
 
             primaryKeyValue = primaryKeyValue.trim();
             if (primaryKeyValueSet.contains(primaryKeyValue)) {
-                throw new Exception("Row[" + recordIndex + "] duplicated primay key value:" + primaryKeyValue);
+                String errorMessage = "Row[" + recordIndex + "] duplicated primay key value:" + primaryKeyValue;
+                if (ImportGlobals.isContinueWhenPkFkError()) {
+                    logger.error(errorMessage);
+                    errorDataCount++;
+                } else {
+                    throw new Exception(errorMessage);
+                }
             } else {
                 primaryKeyValueSet.add(primaryKeyValue);
+                exactDataIndex++; // increase when not duplicated
             }
         }
         logger.info("finish to parse data ...");
+        logger.info("exact data count:" + exactDataIndex + ", error data count:" + errorDataCount);
 
+        if (exactDataIndex + 1 < dataHolder.getSize()) {
+            for (int i = 0; i < dataArr.length; i++) {
+                dataArr[i] = Arrays.copyOfRange(dataArr[i], 0, exactDataIndex);
+            }
+        }
+
+        OracleUtil.createBulkInsertProcedure(connection, tableName, columns, columnMap);
         OracleUtil.bulkinsert(connection, tableName, columns, dataArr);
         OracleUtil.dropBulkInsertProcedure(connection, tableName, columns);
         return;
@@ -256,8 +305,8 @@ public class ImportUtil {
             sqlBuffer.append(insertSqlPrefix);
 
             for (int j = 0; j < columns.size(); j++) {
-                String cname = columns.get(0);
-                String cvalue = (String) row.get(0);
+                String cname = columns.get(j);
+                String cvalue = (String) row.get(j);
                 Column column = columnMap.get(cname);
                 if (j > 0) {
                     sqlBuffer.append(",");
@@ -272,14 +321,6 @@ public class ImportUtil {
         logger.info("finish to build insert sqls ...");
 
         ImportUtil.executeSqls(connection, sqls);
-    }
-
-    /**
-     * ORA-00001: 违反唯一约束条件 (.) <br>
-     * ORA-02261: 表中已存在这样的唯一关键字或主键<br>
-     */
-    private static boolean hasPkFkError(String message) {
-        return message.contains("ORA-02261") || message.contains("ORA-00001");
     }
 
     @SuppressWarnings("rawtypes")
@@ -301,5 +342,23 @@ public class ImportUtil {
         if (cname == null || column == null) {
             throw new Exception("No column named " + cname + " in table " + tableName);
         }
+    }
+
+    /**
+     * remove special characters in column names and check duplicated columns
+     */
+    public static List<String> formatColumnNames(List<String> columns) throws Exception {
+
+        Set<String> columnNameSet = new HashSet<String>();
+        for (int i = 0; i < columns.size(); i++) {
+            String column = columns.get(i);
+            String col = column.replaceAll("\\W", "");
+            if (columnNameSet.contains(col)) {
+                throw new Exception("Exists duplicated column:" + col);
+            }
+            columnNameSet.add(col);
+            columns.set(i, col);
+        }
+        return columns;
     }
 }
