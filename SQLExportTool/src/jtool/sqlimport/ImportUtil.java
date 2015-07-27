@@ -209,7 +209,7 @@ public class ImportUtil {
             try {
                 Date date = datetimeFormat.parse(cvalue);
                 if (bulkinsert) {
-                    return new java.sql.Date(date.getTime());
+                    return new java.sql.Timestamp(date.getTime());
                 }
             } catch (ParseException e) {
                 throw new RuntimeException("Error Row[" + rowIndex + "] bad date time format value[" + cvalue + "] for column " + cname);

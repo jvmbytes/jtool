@@ -38,7 +38,11 @@ public class ImportExcel {
         if (StringUtils.isBlank(fileEncode)) {
             fileEncode = "UTF-8";
         }
-
+        String bulkinsertStr = args[7];
+        boolean bulkinsert = false;
+        if (StringUtils.isBlank(bulkinsertStr)) {
+            bulkinsert = Boolean.valueOf(bulkinsertStr);
+        }
         logger.info("----------------------");
         logger.info(driverName);
         logger.info(linkUrl);
@@ -47,7 +51,7 @@ public class ImportExcel {
         logger.info(tableName);
         logger.info(excelFilePath);
 
-        imp(driverName, linkUrl, userName, password, excelFilePath, tableName, true);
+        imp(driverName, linkUrl, userName, password, excelFilePath, tableName, bulkinsert);
 
         logger.info("------------------------");
         logger.info("over");

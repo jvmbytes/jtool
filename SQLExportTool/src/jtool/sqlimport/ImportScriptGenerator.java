@@ -26,9 +26,11 @@ public class ImportScriptGenerator {
             String suffix = matcher.group(2);
 
             if (suffix.equalsIgnoreCase("csv")) {
-                System.out.println("ImportCSV.imp(driver, url, user, password, \"" + tableName + "\", baseFilePath + \"" + file + "\", encode, true);");
+                System.out.println("java -Xmx4096m jtool.sqlimport.ImportCSV %driver% \"%url%\" %dbuser% %dbpass% " + tableName + " ./csv/" + file + " UTF-8 true");
+                //System.out.println("ImportCSV.imp(driver, url, user, password, \"" + tableName + "\", baseFilePath + \"" + file + "\", encode, true);");
             } else if (suffix.toLowerCase().contains("xls")) {
-                System.out.println("ImportExcel.imp(driver, url, user, password, \"" + tableName + "\", baseFilePath + \"" + file + "\", true);");
+                //System.out.println("ImportExcel.imp(driver, url, user, password, \"" + tableName + "\", baseFilePath + \"" + file + "\", true);");
+                System.out.println("java -Xmx4096m jtool.sqlimport.ImportExcel %driver% \"%url%\" %dbuser% %dbpass% " + tableName + " ./csv/" + file + " UTF-8 true");
             } else {
                 throw new Exception("unknow file suffix:" + file);
             }

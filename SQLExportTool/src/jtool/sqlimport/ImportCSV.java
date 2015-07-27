@@ -43,6 +43,11 @@ public class ImportCSV {
         if (StringUtils.isBlank(fileEncode)) {
             fileEncode = "UTF-8";
         }
+        String bulkinsertStr = args[7];
+        boolean bulkinsert = false;
+        if (StringUtils.isBlank(bulkinsertStr)) {
+            bulkinsert = Boolean.valueOf(bulkinsertStr);
+        }
 
         logger.info("----------------------");
         logger.info(driverName);
@@ -52,7 +57,7 @@ public class ImportCSV {
         logger.info(tableName);
         logger.info(cvsFilePath);
 
-        imp(driverName, linkUrl, userName, password, tableName, cvsFilePath, fileEncode, true);
+        imp(driverName, linkUrl, userName, password, tableName, cvsFilePath, fileEncode, bulkinsert);
 
         logger.info("------------------------");
         logger.info("over");
