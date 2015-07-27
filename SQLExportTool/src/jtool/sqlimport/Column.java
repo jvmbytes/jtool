@@ -59,4 +59,8 @@ public class Column {
         this.nullable = nullable;
     }
 
+    public int getIntegerSize() {
+        return size - decimalDigits;
+    }
+
 }

@@ -82,7 +82,7 @@ public class ImportExcel {
 
         final List<List<Object>> dataList = lines.subList(1, lines.size());
 
-        DataHolder dataHoler = new DataHolder() {
+        DataHolder dataHolder = new DataHolder() {
 
             @Override
             public int getSize() {
@@ -109,10 +109,18 @@ public class ImportExcel {
                 };
             }
         };
+
+        if (ImportGlobals.isValidFirst()) {
+            boolean valid = ImportUtil.validateData(connection, userName, tableName, columns, columnMap, dataHolder);
+            if (!valid) {
+                return; // STOP when not valid
+            }
+        }
+
         if (bulkinsert) {
-            ImportUtil.bulkinsetImp(connection, userName, tableName, columns, columnMap, dataHoler);
+            ImportUtil.bulkinsetImp(connection, userName, tableName, columns, columnMap, dataHolder);
         } else {
-            ImportUtil.onebyoneInsertImp(connection, tableName, columns, columnMap, dataHoler);
+            ImportUtil.onebyoneInsertImp(connection, tableName, columns, columnMap, dataHolder);
         }
     }
 

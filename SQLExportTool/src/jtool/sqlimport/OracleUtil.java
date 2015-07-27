@@ -56,6 +56,7 @@ public class OracleUtil {
             }
 
             String sql = "create or replace type " + typeName + " is table of " + columnTypeDesc;
+            logger.debug(sql);
             statement.execute(sql);
 
             procedureBuffer.append("v" + i + " " + typeName);

@@ -33,7 +33,7 @@ public class ImportUtil {
 
     private static final Logger logger = LoggerFactory.getLogger(ImportUtil.class);
 
-    private static final String NUMBER_PATTER = "\\d+(\\.\\d+)?";
+    private static final String NUMBER_PATTER = "\\-?\\d+(\\.\\d+)?";
 
     private static final String INT_PATTERN = "\\d+";
 
@@ -115,7 +115,7 @@ public class ImportUtil {
             }
         }
 
-        if (cvalue.contains("'")) {
+        if (!bulkinsert && cvalue.contains("'")) {
             String rvalue = cvalue.replaceAll("'", "\"");
             logger.error("Error Row[" + rowIndex + "] contains single quotation marks in column[" + cname + "], change value from [" + cvalue + "] to [" + rvalue + "]");
             cvalue = rvalue;
@@ -150,13 +150,46 @@ public class ImportUtil {
         }
 
         if ("NUMBER".equals(type) || "INT".equals(type)) {
+            String rvalue = cvalue.replaceAll(",", "");
+            rvalue = rvalue.replaceAll("百", "00");
+            rvalue = rvalue.replaceAll("千", "000");
+            rvalue = rvalue.replaceAll("万", "0000");
+            if (rvalue.contains("∞")) {
+                // String temp = "9999999999999999999999999999999999999";
+                // rvalue = rvalue.replaceAll("∞", temp.substring(temp.length()
+                // - column.size + column.decimalDigits + 4 + (rvalue.length() -
+                // 1)));
+                rvalue = "0";
+            }
+            rvalue = rvalue.replaceAll("[^0-9\\.\\-]", "");
+
+            if (!rvalue.equals(cvalue)) {
+                logger.warn("Error Row[" + rowIndex + "] wrong number format, change it from [" + cvalue + "] to [" + rvalue + "]");
+                cvalue = rvalue;
+            }
+            if (ImportGlobals.isChangeNegativeToZero() && cvalue.startsWith("-")) {
+                return "0";
+            }
+
+            if ("".equals(cvalue)) {
+                return null;
+            }
+
             if (cvalue.length() > column.size) {
                 throw new SQLException("Error Row[" + rowIndex + "] the size of the value[" + cvalue + "] of column[" + cname + "] is " + cvalue.length() + ", while the max size is " + column.size);
+            }
+            int dotIndex = cvalue.indexOf(".");
+            if (dotIndex == -1) {
+                dotIndex = cvalue.length();
+            }
+            if (dotIndex > column.getIntegerSize()) {
+                throw new SQLException("Error Row[" + rowIndex + "] the integer size of the value[" + cvalue + "] of column[" + cname + "] is " + dotIndex + ", while the integer max size is "
+                        + column.getIntegerSize());
             }
             if ("NUMBER".equals(column) && !cvalue.matches(NUMBER_PATTER)) {
                 throw new SQLException("Error Row[" + rowIndex + "] the value[" + cvalue + "] is not a number!");
             }
-            if ("IN".equals(column) && !cvalue.matches(INT_PATTERN)) {
+            if ("INT".equals(column) && !cvalue.matches(INT_PATTERN)) {
                 throw new SQLException("Error Row[" + rowIndex + "] the value[" + cvalue + "] is not a integer!");
             }
 
@@ -242,12 +275,20 @@ public class ImportUtil {
     }
 
     public static void bulkinsetImp(Connection connection, String userName, String tableName, List<String> columns, Map<String, Column> columnMap, DataHolder dataHolder) throws Exception {
+        OracleUtil.createBulkInsertProcedure(connection, tableName, columns, columnMap);
         Set<String> primaryKeys = ImportUtil.getPrimaryKeys(connection, userName, tableName);
         Set<String> primaryKeyValueSet = new HashSet<String>();
 
-        logger.info("start to parse data ...");
-        Object[][] dataArr = new Object[columns.size()][dataHolder.getSize()];
+        int totalSize = dataHolder.getSize();
+        logger.info("start to parse data, total data size:" + totalSize);
+        int bulkinsertSize = totalSize;
+        if (bulkinsertSize > ImportGlobals.getMaxBulksize()) {
+            bulkinsertSize = ImportGlobals.getMaxBulksize();
+        }
+        logger.info("initial bulk insert size:" + bulkinsertSize);
+        Object[][] dataArr = new Object[columns.size()][bulkinsertSize];
         int exactDataIndex = 0;
+        int bulkinsertCount = 0;
         int errorDataCount = 0;
         for (int recordIndex = 0; recordIndex < dataHolder.getSize(); recordIndex++) {
             RowHolder row = dataHolder.getRow(recordIndex);
@@ -258,7 +299,7 @@ public class ImportUtil {
                 Column column = columnMap.get(cname);
 
                 Object value = ImportUtil.getSQLFormatedValue(recordIndex, cname, cvalue, column, true);
-                dataArr[i][exactDataIndex] = value;
+                dataArr[i][bulkinsertCount] = value;
 
                 if (primaryKeys.contains(cname)) {
                     primaryKeyValue += value.toString();
@@ -276,20 +317,33 @@ public class ImportUtil {
                 }
             } else {
                 primaryKeyValueSet.add(primaryKeyValue);
-                exactDataIndex++; // increase when not duplicated
+                /* increase when no duplicated */
+                exactDataIndex++;
+                bulkinsertCount++;
+            }
+
+            /* reach the data array size */
+            if (bulkinsertSize < totalSize && bulkinsertCount == bulkinsertSize) {
+                OracleUtil.bulkinsert(connection, tableName, columns, dataArr);
+                /* reset data array */
+                dataArr = new Object[columns.size()][bulkinsertSize];
+                /* reset bulk insert count to zero */
+                bulkinsertCount = 0;
             }
         }
         logger.info("finish to parse data ...");
-        logger.info("exact data count:" + exactDataIndex + ", error data count:" + errorDataCount);
+        logger.info("correct data count:" + exactDataIndex + ", error data count:" + errorDataCount);
 
-        if (exactDataIndex + 1 < dataHolder.getSize()) {
-            for (int i = 0; i < dataArr.length; i++) {
-                dataArr[i] = Arrays.copyOfRange(dataArr[i], 0, exactDataIndex);
+        /* check whether there is still data to insert */
+        if (bulkinsertCount > 0) {
+            if (bulkinsertCount < bulkinsertSize) {
+                for (int i = 0; i < dataArr.length; i++) {
+                    dataArr[i] = Arrays.copyOfRange(dataArr[i], 0, bulkinsertCount);
+                }
             }
+            OracleUtil.bulkinsert(connection, tableName, columns, dataArr);
         }
 
-        OracleUtil.createBulkInsertProcedure(connection, tableName, columns, columnMap);
-        OracleUtil.bulkinsert(connection, tableName, columns, dataArr);
         OracleUtil.dropBulkInsertProcedure(connection, tableName, columns);
         return;
     }
@@ -321,6 +375,48 @@ public class ImportUtil {
         logger.info("finish to build insert sqls ...");
 
         ImportUtil.executeSqls(connection, sqls);
+    }
+
+    public static boolean validateData(Connection connection, String userName, String tableName, List<String> columns, Map<String, Column> columnMap, DataHolder dataHolder) throws Exception {
+        Set<String> primaryKeys = ImportUtil.getPrimaryKeys(connection, userName, tableName);
+        Set<String> primaryKeyValueSet = new HashSet<String>();
+
+        logger.info("start to validate data ...");
+        int exactDataIndex = 0;
+        int errorDataCount = 0;
+        for (int recordIndex = 0; recordIndex < dataHolder.getSize(); recordIndex++) {
+            RowHolder row = dataHolder.getRow(recordIndex);
+            String primaryKeyValue = "";
+            for (int i = 0; i < columns.size(); i++) {
+                String cname = columns.get(i);
+                String cvalue = (String) row.get(i);
+                Column column = columnMap.get(cname);
+                try {
+                    Object value = ImportUtil.getSQLFormatedValue(recordIndex, cname, cvalue, column, true);
+                    if (primaryKeys.contains(cname)) {
+                        primaryKeyValue += value.toString();
+                    }
+                } catch (Exception e) {
+                    logger.error(e.getMessage());
+                    errorDataCount++;
+                    continue;
+                }
+            }
+
+            primaryKeyValue = primaryKeyValue.trim();
+            if (primaryKeyValueSet.contains(primaryKeyValue)) {
+                String errorMessage = "Row[" + recordIndex + "] duplicated primay key value:" + primaryKeyValue;
+                logger.error(errorMessage);
+                errorDataCount++;
+            } else {
+                primaryKeyValueSet.add(primaryKeyValue);
+                exactDataIndex++; // increase when correct
+            }
+        }
+        logger.info("finish to validate data ...");
+        logger.info("correct data count:" + exactDataIndex + ", error data count:" + errorDataCount);
+
+        return errorDataCount == 0;
     }
 
     @SuppressWarnings("rawtypes")

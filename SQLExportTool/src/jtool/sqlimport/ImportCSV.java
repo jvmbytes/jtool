@@ -75,22 +75,23 @@ public class ImportCSV {
         columns = ImportUtil.formatColumnNames(columns);
 
         logger.info("finish to parse file ...");
+
+        logger.info("start to build data holder object ...");
         final List<CSVRecord> records = parser.getRecords();
         DataHolder dataHolder = new DataHolder() {
 
             @Override
-            public RowHolder getRow(int i) {
-                final CSVRecord csvRecord = records.get(i);
+            public RowHolder getRow(final int i) {
                 return new RowHolder() {
 
                     @Override
                     public int size() {
-                        return csvRecord.size();
+                        return records.get(i).size();
                     }
 
                     @Override
-                    public Object get(int i) {
-                        return csvRecord.get(i);
+                    public Object get(int columnIndex) {
+                        return records.get(i).get(columnIndex);
                     }
                 };
             }
@@ -100,6 +101,14 @@ public class ImportCSV {
                 return records.size();
             }
         };
+        logger.info("finish to build data holder object ...");
+
+        if (ImportGlobals.isValidFirst()) {
+            boolean valid = ImportUtil.validateData(connection, userName, tableName, columns, columnMap, dataHolder);
+            if (!valid) {
+                return; // STOP when not valid
+            }
+        }
 
         if (bulkinsert) {
             ImportUtil.bulkinsetImp(connection, userName, tableName, columns, columnMap, dataHolder);
