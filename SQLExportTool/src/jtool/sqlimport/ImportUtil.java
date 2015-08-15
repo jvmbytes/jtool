@@ -295,7 +295,8 @@ public class ImportUtil {
             String primaryKeyValue = "";
             for (int i = 0; i < columns.size(); i++) {
                 String cname = columns.get(i);
-                String cvalue = (String) row.get(i);
+                Object cobject = row.get(i);
+                String cvalue = cobject != null ? cobject.toString() : null;
                 Column column = columnMap.get(cname);
 
                 Object value = ImportUtil.getSQLFormatedValue(recordIndex, cname, cvalue, column, true);
