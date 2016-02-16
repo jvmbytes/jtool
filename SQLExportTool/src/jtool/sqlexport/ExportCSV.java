@@ -8,6 +8,10 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
+import java.util.Map;
+
+import jtool.sql.domain.Column;
+import jtool.sql.util.JdbcUtil;
 
 /**
  * @author Geln Yang
@@ -15,34 +19,35 @@ import java.sql.Statement;
  */
 public class ExportCSV {
 
-    public static void main(String[] args) throws Exception {
-        String driverName = args[0];
-        String linkUrl = args[1];
-        String userName = args[2];
-        String password = args[3];
-        String tableName = args[4];
-        String querySql = args[5];
-        String outputFilePath = "./" + tableName + ".csv";
+  public static void main(String[] args) throws Exception {
+    String driverName = args[0];
+    String linkUrl = args[1];
+    String userName = args[2];
+    String password = args[3];
+    String tableName = args[4];
+    String querySql = args[5];
+    String outputFilePath = "./" + tableName + ".csv";
 
-        System.out.println(driverName);
-        System.out.println(linkUrl);
-        System.out.println(userName);
-        System.out.println(password);
-        System.out.println(tableName);
-        System.out.println(querySql);
-        System.out.println(outputFilePath);
+    System.out.println(driverName);
+    System.out.println(linkUrl);
+    System.out.println(userName);
+    System.out.println(password);
+    System.out.println(tableName);
+    System.out.println(querySql);
+    System.out.println(outputFilePath);
 
-        Class.forName(driverName).newInstance();
-        Connection myConn = DriverManager.getConnection(linkUrl, userName, password);
-        Statement myStmt = myConn.createStatement();
-        ResultSet rs = myStmt.executeQuery(querySql);
-        ResultSetMetaData rmeta = rs.getMetaData();
-        StringBuffer buffer = SqlExportUtil.exportCSV(rmeta, rs);
-        SqlExportUtil.saveToFile(outputFilePath, buffer);
-        rs.close();
-        myStmt.close();
-        myConn.close();
-        System.out.println("------------------------");
-        System.out.println("over");
-    }
+    Class.forName(driverName).newInstance();
+    Connection connection = DriverManager.getConnection(linkUrl, userName, password);
+    Statement myStmt = connection.createStatement();
+    ResultSet rs = myStmt.executeQuery(querySql);
+    ResultSetMetaData rmeta = rs.getMetaData();
+    Map<String, Column> columnMap = JdbcUtil.getColumnMap(connection, userName, tableName);
+    StringBuffer buffer = SqlExportUtil.exportCSV(rmeta, rs, columnMap);
+    SqlExportUtil.saveToFile(outputFilePath, buffer);
+    rs.close();
+    myStmt.close();
+    connection.close();
+    System.out.println("------------------------");
+    System.out.println("over");
+  }
 }

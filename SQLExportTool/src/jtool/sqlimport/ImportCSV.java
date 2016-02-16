@@ -13,8 +13,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import jtool.sqlimport.domain.DataHolder;
-import jtool.sqlimport.domain.RowHolder;
+import jtool.sql.domain.Column;
+import jtool.sql.domain.DataHolder;
+import jtool.sql.domain.RowHolder;
+import jtool.sql.util.JdbcUtil;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -68,7 +70,7 @@ public class ImportCSV {
         Class.forName(driverName).newInstance();
         Connection connection = DriverManager.getConnection(linkUrl, userName, password);
 
-        Map<String, Column> columnMap = ImportUtil.getColumnMap(connection, userName, tableName);
+        Map<String, Column> columnMap = JdbcUtil.getColumnMap(connection, userName, tableName);
 
         logger.info("start to parse file ...");
         File file = new File(cvsFilePath);
@@ -77,7 +79,7 @@ public class ImportCSV {
         Map<String, Integer> headerMap = parser.getHeaderMap();
         List<String> columns = new ArrayList<String>();
         columns.addAll(headerMap.keySet());
-        columns = ImportUtil.formatColumnNames(columns);
+        columns = JdbcUtil.formatColumnNames(columns);
 
         logger.info("finish to parse file ...");
 

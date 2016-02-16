@@ -1,7 +1,7 @@
 /**
  * Created By: Comwave Project Team Created Date: 2015年7月26日
  */
-package jtool.sqlimport.domain;
+package jtool.sql.domain;
 
 
 /**
@@ -10,7 +10,7 @@ package jtool.sqlimport.domain;
  */
 public interface DataHolder {
 
-    public int getSize();
+  public int getSize();
 
-    public RowHolder getRow(int i);
+  public RowHolder getRow(int i);
 }

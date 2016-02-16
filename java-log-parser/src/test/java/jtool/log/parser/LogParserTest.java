@@ -22,11 +22,20 @@ public class LogParserTest
    * @throws IOException Signals that an I/O exception has occurred.
    */
   public static void main(String[] args) throws IOException {
-    File logFile = new File("C:\\tmp\\bpm.log");
-    File outputFile = new File("C:\\tmp\\output");
+    extractLog("sale");
+    extractLog("org");
+    extractLog("report");
+    extractLog("sale");
+    extractLog("settlement");
+  }
+
+  private static void extractLog(String logName) throws IOException {
+    File logFile = new File("C:\\tmp\\"+logName+".log");
+    File outputFile = new File("C:\\tmp\\output\\"+logName);
     if (!outputFile.exists()) {
       FileUtils.forceMkdir(outputFile);
     }
     LogParser.extractErrorList(logFile, outputFile);
+    
   }
 }

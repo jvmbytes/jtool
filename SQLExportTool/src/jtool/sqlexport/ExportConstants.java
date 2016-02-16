@@ -6,7 +6,7 @@ package jtool.sqlexport;
  */
 public class ExportConstants {
 
-    public static final String DEFAULT_ENCODE = "UTF-8";
-    public static final String NEW_LINE = "\r\n";
+  public static final String DEFAULT_ENCODE = "UTF-8";
+  public static final String NEW_LINE = "\r\n";
 
 }

@@ -11,10 +11,11 @@ import jtool.sqlexport.ExportInsert;
  */
 public class TestExportInsert {
 
-	public static void main(String[] args) throws Exception {
-		String[] params = new String[] { "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-				"jdbc:sqlserver://192.168.5.111:1433;DatabaseName=twse;SelectMethod=cursor", "twse", "password",
-				"tb110", "select * from tb110" };
-		ExportInsert.main(params);
-	}
+  public static void main(String[] args) throws Exception {
+    String[] params =
+        new String[] {"com.microsoft.sqlserver.jdbc.SQLServerDriver",
+            "jdbc:sqlserver://192.168.5.111:1433;DatabaseName=twse;SelectMethod=cursor", "twse",
+            "password", "tb110", "select * from tb110"};
+    ExportInsert.main(params);
+  }
 }

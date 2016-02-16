@@ -10,6 +10,7 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 
+import jtool.sql.domain.Column;
 import oracle.sql.ARRAY;
 import oracle.sql.ArrayDescriptor;
 
@@ -20,8 +21,8 @@ import org.slf4j.LoggerFactory;
  * @author Geln Yang
  * @version 1.0
  */
-public class OracleUtil {
-    private static final Logger logger = LoggerFactory.getLogger(OracleUtil.class);
+public class OracleInsertUtil {
+    private static final Logger logger = LoggerFactory.getLogger(OracleInsertUtil.class);
 
     public static String createBulkInsertProcedure(Connection connection, String tableName, List<String> columns, Map<String, Column> columnMap) throws Exception {
         Statement statement = connection.createStatement();

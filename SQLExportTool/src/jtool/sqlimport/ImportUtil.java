@@ -4,8 +4,6 @@
 package jtool.sqlimport;
 
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.text.ParseException;
@@ -13,14 +11,15 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import jtool.sqlimport.domain.DataHolder;
-import jtool.sqlimport.domain.RowHolder;
+import jtool.sql.domain.Column;
+import jtool.sql.domain.DataHolder;
+import jtool.sql.domain.RowHolder;
+import jtool.sql.util.JdbcUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,47 +44,6 @@ public class ImportUtil {
 
     static SimpleDateFormat datetimeFormat = new SimpleDateFormat(datetimeFormatPattern);
 
-    public static Set<String> getPrimaryKeys(Connection connection, String userName, String tableName) throws SQLException {
-        logger.info("start to get table primary keys ...");
-        Set<String> columnSet = new HashSet<String>();
-        DatabaseMetaData metaData = connection.getMetaData();
-        ResultSet rs = metaData.getPrimaryKeys(null, userName.toUpperCase(), tableName.toUpperCase());
-        while (rs.next()) {
-            String name = rs.getString("COLUMN_NAME");
-            columnSet.add(name);
-        }
-        logger.info("finish to get table primary keys:" + columnSet);
-
-        return columnSet;
-    }
-
-    public static Map<String, Column> getColumnMap(Connection connection, String userName, String tableName) throws SQLException {
-        logger.info("start to get table column definitions ...");
-        Map<String, Column> columnMap = new HashMap<String, Column>();
-        DatabaseMetaData metaData = connection.getMetaData();
-        ResultSet columnResultSet = metaData.getColumns(null, userName.toUpperCase(), tableName.toUpperCase(), "%");
-
-        while (columnResultSet.next()) {
-            String name = columnResultSet.getString("COLUMN_NAME");
-            String type = columnResultSet.getString("TYPE_NAME");
-            int size = columnResultSet.getInt("COLUMN_SIZE");
-            int digits = columnResultSet.getInt("DECIMAL_DIGITS");
-            int nullable = columnResultSet.getInt("NULLABLE");
-
-            Column column = new Column();
-            column.setName(name);
-            column.setType(type);
-            column.setSize(size);
-            column.setDecimalDigits(digits);
-            column.setNullable(nullable > 0);
-
-            columnMap.put(name, column);
-        }
-        logger.info("finish to get table column definitions ...");
-        logger.info("column count of table " + tableName + ":" + columnMap.size());
-
-        return columnMap;
-    }
 
     public static void addColumnValue(StringBuffer buffer, int rowIndex, String cname, String cvalue, Column column) throws Exception {
         Object formatedValue = getSQLFormatedValue(rowIndex, cname, cvalue, column, false);
@@ -247,7 +205,7 @@ public class ImportUtil {
             } catch (Exception e) {
                 logger.error("error to execute sql[" + i + "]: \t" + sql);
                 errorCount++;
-                if (OracleUtil.hasPkFkError(e.getMessage()) && ImportGlobals.isContinueWhenPkFkError()) {
+                if (OracleInsertUtil.hasPkFkError(e.getMessage()) && ImportGlobals.isContinueWhenPkFkError()) {
                     logger.error(e.getMessage());
                     continue;
                 }
@@ -275,8 +233,8 @@ public class ImportUtil {
     }
 
     public static void bulkinsetImp(Connection connection, String userName, String tableName, List<String> columns, Map<String, Column> columnMap, DataHolder dataHolder) throws Exception {
-        OracleUtil.createBulkInsertProcedure(connection, tableName, columns, columnMap);
-        Set<String> primaryKeys = ImportUtil.getPrimaryKeys(connection, userName, tableName);
+        OracleInsertUtil.createBulkInsertProcedure(connection, tableName, columns, columnMap);
+        Set<String> primaryKeys = JdbcUtil.getPrimaryKeys(connection, userName, tableName);
         Set<String> primaryKeyValueSet = new HashSet<String>();
 
         int totalSize = dataHolder.getSize();
@@ -325,7 +283,7 @@ public class ImportUtil {
 
             /* reach the data array size */
             if (bulkinsertSize < totalSize && bulkinsertCount == bulkinsertSize) {
-                OracleUtil.bulkinsert(connection, tableName, columns, dataArr);
+                OracleInsertUtil.bulkinsert(connection, tableName, columns, dataArr);
                 /* reset data array */
                 dataArr = new Object[columns.size()][bulkinsertSize];
                 /* reset bulk insert count to zero */
@@ -342,10 +300,10 @@ public class ImportUtil {
                     dataArr[i] = Arrays.copyOfRange(dataArr[i], 0, bulkinsertCount);
                 }
             }
-            OracleUtil.bulkinsert(connection, tableName, columns, dataArr);
+            OracleInsertUtil.bulkinsert(connection, tableName, columns, dataArr);
         }
 
-        OracleUtil.dropBulkInsertProcedure(connection, tableName, columns);
+        OracleInsertUtil.dropBulkInsertProcedure(connection, tableName, columns);
         return;
     }
 
@@ -379,7 +337,7 @@ public class ImportUtil {
     }
 
     public static boolean validateData(Connection connection, String userName, String tableName, List<String> columns, Map<String, Column> columnMap, DataHolder dataHolder) throws Exception {
-        Set<String> primaryKeys = ImportUtil.getPrimaryKeys(connection, userName, tableName);
+        Set<String> primaryKeys = JdbcUtil.getPrimaryKeys(connection, userName, tableName);
         Set<String> primaryKeyValueSet = new HashSet<String>();
 
         logger.info("start to validate data ...");
@@ -441,21 +399,4 @@ public class ImportUtil {
         }
     }
 
-    /**
-     * remove special characters in column names and check duplicated columns
-     */
-    public static List<String> formatColumnNames(List<String> columns) throws Exception {
-
-        Set<String> columnNameSet = new HashSet<String>();
-        for (int i = 0; i < columns.size(); i++) {
-            String column = columns.get(i);
-            String col = column.replaceAll("\\W", "");
-            if (columnNameSet.contains(col)) {
-                throw new Exception("Exists duplicated column:" + col);
-            }
-            columnNameSet.add(col);
-            columns.set(i, col);
-        }
-        return columns;
-    }
 }
