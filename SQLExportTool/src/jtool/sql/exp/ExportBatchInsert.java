@@ -16,12 +16,15 @@ import jtool.sql.domain.Column;
 import jtool.sql.util.JdbcUtil;
 
 import org.apache.commons.io.FileUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Geln Yang
  * @version 1.0
  */
 public class ExportBatchInsert {
+  private static final Logger logger = LoggerFactory.getLogger(ExportBatchInsert.class);
 
   public static void main(String[] args) throws Exception {
     String driverName = args[0];
@@ -33,12 +36,12 @@ public class ExportBatchInsert {
     String batchSqlFilePath = "./" + batchSql;
     String outputFilePath = "./" + saveFileName + ".sql";
 
-    System.out.println(driverName);
-    System.out.println(linkUrl);
-    System.out.println(userName);
-    System.out.println(password);
-    System.out.println(batchSql);
-    System.out.println(outputFilePath);
+    logger.info(driverName);
+    logger.info(linkUrl);
+    logger.info(userName);
+    logger.info(password);
+    logger.info(batchSql);
+    logger.info(outputFilePath);
 
     Class.forName(driverName).newInstance();
     Connection connection = DriverManager.getConnection(linkUrl, userName, password);
@@ -72,7 +75,7 @@ public class ExportBatchInsert {
     SqlExportUtil.saveToFile(outputFilePath, buffer);
 
     connection.close();
-    System.out.println("------------------------");
-    System.out.println("over");
+    logger.info("------------------------");
+    logger.info("over");
   }
 }

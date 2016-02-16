@@ -11,26 +11,31 @@ import jtool.sql.domain.Column;
 import jtool.sql.util.JdbcUtil;
 
 import org.apache.commons.io.FileUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Geln Yang
  * @createdDate 2014年11月21日
  */
 public class SqlExportUtil {
+  private static final Logger logger = LoggerFactory.getLogger(SqlExportUtil.class);
 
   public static StringBuffer exportCSV(ResultSetMetaData rmeta, ResultSet rs,
       Map<String, Column> columnMap) throws SQLException, IOException {
     int numColumns = rmeta.getColumnCount();
-    System.out.println("column count: " + numColumns);
-    System.out.println("-------------------------------------");
+    logger.info("column count: " + numColumns);
+    logger.info("-------------------------------------");
+    String columnNames = "";
     for (int i = 1; i <= numColumns; i++) {
       if (i < numColumns) {
-        System.out.print(rmeta.getColumnName(i) + " , ");
+        columnNames += rmeta.getColumnName(i) + " , ";
       } else {
-        System.out.println(rmeta.getColumnName(i));
+        columnNames += rmeta.getColumnName(i);
       }
     }
-    System.out.println("-------------------------------------");
+    logger.info(columnNames);
+    logger.info("-------------------------------------");
 
     String head = "";
     for (int i = 1; i <= numColumns; i++) {
@@ -41,49 +46,29 @@ public class SqlExportUtil {
     // output data
     StringBuffer buffer = new StringBuffer();
     buffer.append(head);
-    int count = 0;
-    while (rs.next()) {
-      count++;
-      for (int i = 1; i <= numColumns; i++) {
-        String data = JdbcUtil.getData(columnMap, rmeta, rs, i);
-        if (data != null) {
-          if (i < numColumns) {
-            buffer.append("\"" + data.trim() + "\",");
-          } else {
-            buffer.append("\"" + rs.getString(i).trim() + "\"\r\n");
-          }
-        } else {
-          if (i < numColumns) {
-            buffer.append(",");
-          } else {
-            buffer.append("\r\n");
-          }
-        }
-      }
-    }
-
-    System.out.println("Record count: " + count);
+    int count = addExportRecords(buffer, columnMap, rmeta, rs, false, "");
+    logger.info("Record count: " + count);
     return buffer;
   }
 
   public static StringBuffer exportInsert(ResultSetMetaData rmeta, ResultSet rs, String tableName,
       Map<String, Column> columnMap) throws SQLException, IOException {
     int numColumns = rmeta.getColumnCount();
-    System.out.println("column count: " + numColumns);
-    System.out.println("-------------------------------------");
+    logger.info("column count: " + numColumns);
+    logger.info("-------------------------------------");
     for (int i = 1; i <= numColumns; i++) {
       if (i < numColumns) {
         System.out.print(rmeta.getColumnName(i) + " , ");
       } else {
-        System.out.println(rmeta.getColumnName(i));
+        logger.info(rmeta.getColumnName(i));
       }
 
       if (tableName == null || tableName.trim().length() == 0) {
         tableName = rmeta.getTableName(i);
       }
     }
-    System.out.println("-------------------------------------");
-    System.out.println("Table Name: " + tableName);
+    logger.info("-------------------------------------");
+    logger.info("Table Name: " + tableName);
 
     String insertSqlPrefix = "INSERT INTO " + tableName.toUpperCase() + " (";
     for (int i = 1; i <= numColumns; i++) {
@@ -93,35 +78,58 @@ public class SqlExportUtil {
 
     // output data
     StringBuffer buffer = new StringBuffer();
-    int count = 0;
-    while (rs.next()) {
-      count++;
-      buffer.append(insertSqlPrefix);
-      for (int i = 1; i <= numColumns; i++) {
-        String data = JdbcUtil.getData(columnMap, rmeta, rs, i);
-        if (data != null) {
-          if (i < numColumns) {
-            buffer.append("'" + data.trim() + "',");
-          } else {
-            buffer.append("'" + rs.getString(i).trim() + "');\r\n");
-          }
-        } else {
-          if (i < numColumns) {
-            buffer.append(",");
-          } else {
-            buffer.append(");\r\n");
-          }
-        }
-      }
-    }
-
-    System.out.println("Record count: " + count);
+    int count = addExportRecords(buffer, columnMap, rmeta, rs, true, insertSqlPrefix);
+    logger.info("Record count: " + count);
     return buffer;
   }
 
+  private static int addExportRecords(StringBuffer buffer, Map<String, Column> columnMap,
+      ResultSetMetaData rmeta, ResultSet rs, boolean isInsert, String insertSqlPrefix)
+      throws SQLException {
+    int count = 0;
+    int numColumns = rmeta.getColumnCount();
+    while (rs.next()) {
+      count++;
+      if (isInsert) {
+        buffer.append(insertSqlPrefix);
+      }
+      /* loop add columns values */
+      for (int i = 1; i <= numColumns; i++) {
+        String data = JdbcUtil.getData(columnMap, rmeta, rs, i);
+        addExportRecordColumnValue(buffer, data, i == numColumns, isInsert);
+      }
+    }
+    return count;
+  }
+
+  private static void addExportRecordColumnValue(StringBuffer buffer, String data, boolean isLast,
+      boolean isInsert) {
+    if (data != null) {
+      data = data.trim();
+      if (isInsert) {
+        data = data.replaceAll("'", "\"");
+      } else {
+        data = data.replaceAll("\"", "'");
+      }
+      data = isInsert ? "'" + data + "'" : "\"" + data + "\"";
+    } else {
+      data = isInsert ? "null" : "";
+    }
+
+    if (isLast) {
+      buffer.append(data);
+      if (isInsert) {
+        buffer.append(");");
+      }
+      buffer.append("\r\n");
+    } else {
+      buffer.append(data + ",");
+    }
+  }
+
   public static void saveToFile(String outputFilePath, StringBuffer buffer) throws IOException {
-    System.out.println("start to write into file ... ");
+    logger.info("start to write into file ... ");
     FileUtils.writeStringToFile(new File(outputFilePath), buffer.toString(), "UTF-8");
-    System.out.println("end to write into file ... ");
+    logger.info("end to write into file ... ");
   }
 }

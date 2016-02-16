@@ -17,8 +17,11 @@ import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ExportDBSchema {
+  private static final Logger logger = LoggerFactory.getLogger(ExportDBSchema.class);
 
   /** 主键前缀 */
   private static final String TABLE_PRIMARY_KEY_PREFIX = "PK%";
@@ -71,7 +74,7 @@ public class ExportDBSchema {
     ResultSet rs2 = null;
 
     // 查询所有表名
-    System.out.println("start to add table name ... ");
+    logger.info("start to add table name ... ");
     myStmt = myConn.prepareStatement(sql_table);
     rs = myStmt.executeQuery();
     int count_table = 0;
@@ -83,11 +86,11 @@ public class ExportDBSchema {
         tables.add(temp_table_name.trim());
       }
     }
-    System.out.println("Table count: " + count_table);
-    System.out.println("end to add table name ... ");
+    logger.info("Table count: " + count_table);
+    logger.info("end to add table name ... ");
 
     // 查询所有字段和字段类型
-    System.out.println("start to add column name ... ");
+    logger.info("start to add column name ... ");
     StringBuffer buffer_table = new StringBuffer();
     StringBuffer buffer_header = new StringBuffer();
     StringBuffer buffer_html = new StringBuffer();
@@ -195,20 +198,20 @@ public class ExportDBSchema {
       buffer_table.append("</table>");
       buffer_html.append(buffer_table);
     }
-    System.out.println("end to add column name ... ");
+    logger.info("end to add column name ... ");
 
-    System.out.println("start to write into file ... ");
+    logger.info("start to write into file ... ");
     File file = new File(outputFilePath);
-    System.out.println("file path:" + file.getAbsolutePath());
+    logger.info("file path:" + file.getAbsolutePath());
     FileUtils.writeStringToFile(file, buffer_html.toString(), "UTF-8");
-    System.out.println("end to write into file ... ");
+    logger.info("end to write into file ... ");
     rs.close();
     rs2.close();
     myStmt.close();
     myStmt2.close();
     myConn.close();
-    System.out.println("------------------------");
-    System.out.println("over");
+    logger.info("------------------------");
+    logger.info("over");
   }
 
   public static void printForeignKeys(Connection connection, String tableName) throws SQLException {
@@ -219,8 +222,7 @@ public class ExportDBSchema {
       String fkColumnName = foreignKeys.getString("FKCOLUMN_NAME");
       String pkTableName = foreignKeys.getString("PKTABLE_NAME");
       String pkColumnName = foreignKeys.getString("PKCOLUMN_NAME");
-      System.out.println(fkTableName + "." + fkColumnName + " -> " + pkTableName + "."
-          + pkColumnName);
+      logger.info(fkTableName + "." + fkColumnName + " -> " + pkTableName + "." + pkColumnName);
     }
   }
 
