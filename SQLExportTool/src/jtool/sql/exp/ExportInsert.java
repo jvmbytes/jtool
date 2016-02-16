@@ -1,7 +1,7 @@
 /**
  * Created Date: Dec 14, 2011 9:35:31 AM
  */
-package jtool.sqlexport;
+package jtool.sql.exp;
 
 import java.sql.Connection;
 import java.sql.DriverManager;

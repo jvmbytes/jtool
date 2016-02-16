@@ -1,7 +1,7 @@
 /**
  * Created By: Comwave Project Team Created Date: 2015年7月24日
  */
-package jtool.sqlimport;
+package jtool.sql.imp;
 
 import java.sql.Connection;
 import java.sql.SQLException;

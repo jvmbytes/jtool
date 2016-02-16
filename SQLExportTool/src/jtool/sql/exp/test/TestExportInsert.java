@@ -1,9 +1,9 @@
 /**
  * Created Date: Dec 14, 2011 9:56:06 AM
  */
-package jtool.sqlexport.test;
+package jtool.sql.exp.test;
 
-import jtool.sqlexport.ExportInsert;
+import jtool.sql.exp.ExportInsert;
 
 /**
  * @author Geln Yang

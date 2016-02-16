@@ -1,4 +1,4 @@
-package jtool.sqlexport;
+package jtool.sql.exp;
 
 import java.io.File;
 import java.io.IOException;

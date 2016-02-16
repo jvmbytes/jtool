@@ -20,8 +20,8 @@ import java.util.Map;
 import java.util.Set;
 
 import jtool.sql.domain.Column;
-import jtool.sqlimport.ImportGlobals;
-import jtool.sqlimport.OracleInsertUtil;
+import jtool.sql.imp.ImportGlobals;
+import jtool.sql.imp.OracleInsertUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

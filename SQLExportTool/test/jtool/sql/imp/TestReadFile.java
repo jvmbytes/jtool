@@ -1,7 +1,7 @@
 /**
  * Created By: Comwave Project Team Created Date: 2015年6月23日
  */
-package jtool.sqlimport;
+package jtool.sql.imp;
 
 import java.io.File;
 import java.io.FileReader;

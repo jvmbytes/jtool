@@ -1,7 +1,7 @@
 /**
  * Created By: Comwave Project Team Created Date: 2015年7月25日
  */
-package jtool.sqlimport;
+package jtool.sql.imp;
 
 /**
  * @author Geln Yang
