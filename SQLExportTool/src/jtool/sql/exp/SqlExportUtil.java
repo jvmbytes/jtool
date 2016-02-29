@@ -56,17 +56,17 @@ public class SqlExportUtil {
     int numColumns = rmeta.getColumnCount();
     logger.info("column count: " + numColumns);
     logger.info("-------------------------------------");
+    String columns = "";
     for (int i = 1; i <= numColumns; i++) {
+      columns += rmeta.getColumnName(i);
       if (i < numColumns) {
-        System.out.print(rmeta.getColumnName(i) + " , ");
-      } else {
-        logger.info(rmeta.getColumnName(i));
+        columns += " , ";
       }
-
       if (tableName == null || tableName.trim().length() == 0) {
         tableName = rmeta.getTableName(i);
       }
     }
+    logger.info(columns);
     logger.info("-------------------------------------");
     logger.info("Table Name: " + tableName);
 
@@ -95,15 +95,18 @@ public class SqlExportUtil {
       }
       /* loop add columns values */
       for (int i = 1; i <= numColumns; i++) {
-        String data = JdbcUtil.getData(columnMap, rmeta, rs, i);
-        addExportRecordColumnValue(buffer, data, i == numColumns, isInsert);
+        String columnName = rmeta.getColumnName(i);
+        Column column = columnMap.get(columnName);
+        String type = column.getType();
+        String data = JdbcUtil.getData(type, rs, i);
+        addExportRecordColumnValue(buffer, data, type, i == numColumns, isInsert);
       }
     }
     return count;
   }
 
-  private static void addExportRecordColumnValue(StringBuffer buffer, String data, boolean isLast,
-      boolean isInsert) {
+  private static void addExportRecordColumnValue(StringBuffer buffer, String data,
+      String columnType, boolean isLast, boolean isInsert) {
     if (data != null) {
       data = data.trim();
       if (isInsert) {
@@ -111,7 +114,11 @@ public class SqlExportUtil {
       } else {
         data = data.replaceAll("\"", "'");
       }
-      data = isInsert ? "'" + data + "'" : "\"" + data + "\"";
+      if (isInsert) {
+        data = JdbcUtil.oracleInsertFormatedData(columnType, data);
+      } else {
+        data = "\"" + data + "\"";
+      }
     } else {
       data = isInsert ? "null" : "";
     }

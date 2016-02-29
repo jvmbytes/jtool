@@ -30,10 +30,12 @@ public class JdbcUtil {
   private static final Logger logger = LoggerFactory.getLogger(JdbcUtil.class);
 
   static String dateFormatPattern = "yyyy/MM/dd";
+  static String oracleDateFormatPattern = "yyyy/mm/dd";
 
   static SimpleDateFormat dateFormat = new SimpleDateFormat(dateFormatPattern);
 
   static String datetimeFormatPattern = "yyyy/MM/dd HH:mm:ss";
+  static String oracleDatetimeFormatPattern = "yyyy/mm/dd hh24:mi:ss";
 
   static SimpleDateFormat datetimeFormat = new SimpleDateFormat(datetimeFormatPattern);
 
@@ -105,13 +107,17 @@ public class JdbcUtil {
     String columnName = rmeta.getColumnName(i);
     Column column = columnMap.get(columnName);
     String type = column.getType();
-    if (type.indexOf("TIMESTAMP") != -1) {
+    return getData(type, rs, i);
+  }
+
+  public static String getData(String columnType, ResultSet rs, int i) throws SQLException {
+    if (columnType.indexOf("TIMESTAMP") != -1) {
       Timestamp time = rs.getTimestamp(i);
       if (time == null) {
         return null;
       }
       return datetimeFormat.format(time);
-    } else if (type.indexOf("DATE") != -1) {
+    } else if (columnType.indexOf("DATE") != -1) {
       java.sql.Date date = rs.getDate(i);
       if (date == null) {
         return null;
@@ -119,6 +125,16 @@ public class JdbcUtil {
       return dateFormat.format(date);
     } else {
       return rs.getString(i);
+    }
+  }
+
+  public static String oracleInsertFormatedData(String columnType, String value) {
+    if (columnType.indexOf("TIMESTAMP") != -1) {
+      return "to_date('" + value + "','" + oracleDatetimeFormatPattern + "')";
+    } else if (columnType.indexOf("DATE") != -1) {
+      return "to_date('" + value + "','" + oracleDateFormatPattern + "')";
+    } else {
+      return "'" + value + "'";
     }
   }
 }
